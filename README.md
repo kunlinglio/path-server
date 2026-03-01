@@ -3,3 +3,6 @@ A fast and lightweight language server for path completion, go to definition and
 
 # Resources
 - [zed extension](https://github.com/KunlingLio/path-server-zed)
+
+# TODO
+- [ ] Support remote url.

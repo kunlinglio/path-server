@@ -31,7 +31,7 @@ impl tower_lsp::LanguageServer for PathServer {
     async fn initialize(&self, params: lsp_types::InitializeParams) -> Result<lsp_types::InitializeResult> {
         if let Some(url) = params.root_uri {
             logger::info(format!("Adding workspace root: {}", url)).await;
-            self.resolver.add_workspace_root(&url);
+            self.resolver.add_workspace_root(&url).await;
         }
         Ok(lsp_types::InitializeResult {
             capabilities: lsp_types::ServerCapabilities {
@@ -70,13 +70,13 @@ impl tower_lsp::LanguageServer for PathServer {
             self.client
                 .log_message(lsp_types::MessageType::INFO, format!("[Path Server] Added workspace folder: {}", folder.uri))
                 .await;
-            self.resolver.add_workspace_root(&folder.uri);
+            self.resolver.add_workspace_root(&folder.uri).await;
         }
         for folder in params.event.removed {
             self.client
                 .log_message(lsp_types::MessageType::INFO, format!("[Path Server] Removed workspace folder: {}", folder.uri))
                 .await;
-            self.resolver.remove_workspace_root(&folder.uri);
+            self.resolver.remove_workspace_root(&folder.uri).await;
         }
     }
 
@@ -103,7 +103,7 @@ impl tower_lsp::LanguageServer for PathServer {
             .get(&params.text_document_position.text_document.uri.to_string())
             .and_then(|doc| doc.get_line(line_number))
             .map(|line| {
-                let character = character.min(line.len());
+                // let character = character.min(line.len());
                 line[..character].to_string()
             })
             .unwrap_or_default();
