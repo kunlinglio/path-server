@@ -8,10 +8,6 @@ impl Document {
         Self { text }
     }
 
-    pub fn get_text(&self) -> &str {
-        &self.text
-    }
-
     pub fn update_text(&mut self, new_text: String) {
         self.text = new_text;
     }
