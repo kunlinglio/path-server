@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::sync::OnceLock;
 
 use tower_lsp::lsp_types;

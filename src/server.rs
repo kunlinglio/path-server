@@ -1,11 +1,11 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use tokio::sync::Mutex;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types;
 
-use std::collections::HashSet;
+use regex::Regex;
 use std::path::PathBuf;
 
 use crate::document::Document;
@@ -132,41 +132,32 @@ impl tower_lsp::LanguageServer for PathServer {
                 line[..character].to_string()
             })
             .unwrap_or("".into());
-        let prefix = PathBuf::from(prefix_string.clone()); // the path to be completed
+        let candidate = parse_path(&prefix_string);
+        let prefix = PathBuf::from(candidate.clone()); // the path to be completed
         info(format!("Completing prefix: '{}'", prefix.display())).await;
         // 2. parse prefix into finished and remains
-        // let Some(finished) = prefix.parent() else {
-        //     info(format!(
-        //         "Failed to get parent of prefix: {}",
-        //         prefix.display()
-        //     ))
-        //     .await;
-        //     return Ok(None);
-        // };
-        // info(format!("@@@ finished: {}", finished.display())).await;
-        // let remains = prefix.file_name();
-        let (finished, remains) = separate_prefix(&prefix_string);
+        let (finished, remains) = separate_prefix(&candidate);
         let finished = PathBuf::from(finished);
         // 3. fs access
         let mut completion_filenames: Vec<lsp_types::CompletionItem> = vec![];
-        if !finished.exists() {
-            info(format!(
-                "Prefix parent does not exist: {}",
-                finished.display()
-            ))
-            .await;
-            return Ok(None);
-        }
-        if !finished.is_dir() {
-            info(format!(
-                "Prefix parent is not a directory: {}",
-                finished.display()
-            ))
-            .await;
-            return Ok(None);
-        }
         if prefix.is_absolute() {
             // a. absolute path
+            if !finished.exists() {
+                info(format!(
+                    "Prefix parent does not exist: {}",
+                    finished.display()
+                ))
+                .await;
+                return Ok(None);
+            }
+            if !finished.is_dir() {
+                info(format!(
+                    "Prefix parent is not a directory: {}",
+                    finished.display()
+                ))
+                .await;
+                return Ok(None);
+            }
             let Ok(files) = finished.read_dir() else {
                 info(format!("Failed to read directory: {}", finished.display())).await;
                 return Ok(None);
@@ -218,9 +209,15 @@ impl tower_lsp::LanguageServer for PathServer {
                 };
                 let dir = root_path.join(finished.clone());
                 if !dir.exists() {
+                    info(format!("Prefix parent does not exist: {}", dir.display())).await;
                     continue;
                 }
                 if !dir.is_dir() {
+                    info(format!(
+                        "Prefix parent is not a directory: {}",
+                        dir.display()
+                    ))
+                    .await;
                     continue;
                 }
                 let Ok(files) = dir.read_dir() else {
@@ -306,6 +303,43 @@ fn separate_prefix(prefix: &str) -> (String, String) {
     panic!("Unsupported platform!")
 }
 
+fn parse_path(line: &str) -> String {
+    // // 1. parse by delimiters
+    // let delimiters = ['"', '\'', '`', '(', '['];
+    // for delimiter in delimiters {
+    //     if let Some(pos) = line.rfind(delimiter) {
+    //         return line[pos + 1..].to_string();
+    //     }
+    // }
+
+    // 2. parse by "D:" or ".\" or "..\" on windows
+    //          by "/" or "~/" or "./" or "../" on unix
+    if cfg!(unix) {
+        let beginning = ["~/", "./", "../", "/"];
+        for prefix in beginning {
+            if let Some(pos) = line.rfind(prefix) {
+                return line[pos..].to_string();
+            }
+        }
+    } else if cfg!(windows) {
+        let beginning_regex = [r#"^[a-zA-Z]:\\"#, r#"^\.\\"#, r#"^\.\.\\ "#];
+        for regex in beginning_regex {
+            if let Ok(re) = Regex::new(regex) {
+                if let Some(mat) = re.find(line) {
+                    return line[mat.end()..].to_string();
+                }
+            }
+        }
+    } else {
+        panic!("Unsupported platform!")
+    }
+    // 3. parse by space
+    if let Some(pos) = line.rfind(' ') {
+        return line[pos + 1..].to_string();
+    }
+    line.to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -327,5 +361,16 @@ mod tests {
         let (finished, remains) = separate_prefix("../file.txt");
         assert_eq!(finished, "../");
         assert_eq!(remains, "file.txt");
+    }
+
+    #[test]
+    fn test_parse_path() {
+        assert_eq!(parse_path("~/file.txt"), "~/file.txt");
+        assert_eq!(
+            parse_path("more information from D:\\code\\file.txt"),
+            "D:\\code\\file.txt"
+        );
+        assert_eq!(parse_path("links: [file](./file.txt"), "./file.txt");
+        assert_eq!(parse_path("- [file](./file.txt"), "./file.txt");
     }
 }
