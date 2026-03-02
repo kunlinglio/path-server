@@ -301,21 +301,32 @@ fn parse_path(line: &str) -> String {
     // 1. parse by beginning
     //    e.g. "D:" or ".\" or "..\" for windows
     //    e.g. "/" or "~/" or "./" or "../" for unix
-    let beginning = ["~/", "./", "../", "/"];
-    for prefix in beginning {
-        if let Some(pos) = line.rfind(prefix) {
-            return line[pos..].to_string();
+    // handle unix
+    let beginning_unix = [r#"~/"#, r#"\.\./"#, r#"\./"#];
+    for prefix in beginning_unix {
+        if let Ok(re) = Regex::new(prefix) {
+            if let Some(mat) = re.find_iter(line).last() {
+                return line[mat.start()..].to_string();
+            }
         }
     }
-    let beginning_regex = [r#"[a-zA-Z]:\\"#, r#"\.\\"#, r#"\.\.\\ "#];
-    for regex in beginning_regex {
+    // special case for unix root "/"
+    let root_regex = Regex::new(r#"(?:^|[\s"'\[(])(/)"#).unwrap();
+    if let Some(mat) = root_regex.find_iter(line).last() {
+        if let Some(pos) = line[mat.start()..mat.end()].find('/') {
+            return line[mat.start() + pos..].to_string();
+        }
+    }
+    // handle windows
+    let beginning_windows = [r#"[a-zA-Z]:\\"#, r#"\.\\"#, r#"\.\.\\ "#];
+    for regex in beginning_windows {
         if let Ok(re) = Regex::new(regex) {
             if let Some(mat) = re.find_iter(line).last() {
                 return line[mat.start()..].to_string();
             }
         }
     }
-    // 3. parse by space
+    // 2. parse by space
     if let Some(pos) = line.rfind(' ') {
         return line[pos + 1..].to_string();
     }
@@ -328,31 +339,63 @@ mod tests {
 
     #[test]
     fn test_separate_prefix() {
-        let (finished, remains) = separate_prefix("/home/user/file.txt");
-        assert_eq!(finished, "/home/user/");
-        assert_eq!(remains, "file.txt");
+        // unix style
+        let (base, partial) = separate_prefix("/home/user/file.txt");
+        assert_eq!(base, "/home/user/");
+        assert_eq!(partial, "file.txt");
 
-        let (finished, remains) = separate_prefix("file.txt");
-        assert_eq!(finished, "./");
-        assert_eq!(remains, "file.txt");
+        // Windows style
+        let (base, partial) = separate_prefix(r"C:\Users\Admin\Doc");
+        assert_eq!(base, r"C:\Users\Admin\");
+        assert_eq!(partial, "Doc");
 
-        let (finished, remains) = separate_prefix("./file.txt");
-        assert_eq!(finished, "./");
-        assert_eq!(remains, "file.txt");
+        // only filename
+        let (base, partial) = separate_prefix("file.txt");
+        assert_eq!(base, "./");
+        assert_eq!(partial, "file.txt");
 
-        let (finished, remains) = separate_prefix("../file.txt");
-        assert_eq!(finished, "../");
-        assert_eq!(remains, "file.txt");
+        // only dir
+        let (base, partial) = separate_prefix("/usr/bin/");
+        assert_eq!(base, "/usr/bin/");
+        assert_eq!(partial, "");
+
+        // hidden file
+        let (base, partial) = separate_prefix("./.config");
+        assert_eq!(base, "./");
+        assert_eq!(partial, ".config");
     }
 
     #[test]
     fn test_parse_path() {
-        assert_eq!(parse_path("~/file.txt"), "~/file.txt");
+        // 1. unix home dir
         assert_eq!(
-            parse_path("more information from D:\\code\\file.txt"),
-            "D:\\code\\file.txt"
+            parse_path("~/projects/rust/main.rs"),
+            "~/projects/rust/main.rs"
         );
-        assert_eq!(parse_path("links: [file](./file.txt"), "./file.txt");
-        assert_eq!(parse_path("- [file](./file.txt"), "./file.txt");
+        assert_eq!(parse_path("/etc/nginx/nginx.conf"), "/etc/nginx/nginx.conf");
+
+        // 2. windows
+        assert_eq!(
+            parse_path(r"setting=C:\Windows\System32\"),
+            r"C:\Windows\System32\"
+        );
+        assert_eq!(parse_path(r"Look at .\local\file"), r".\local\file");
+
+        // 3. quote
+        assert_eq!(
+            parse_path("import './components/Header"),
+            "./components/Header"
+        );
+        assert_eq!(
+            parse_path("let p = \"../data/config.json"),
+            "../data/config.json"
+        );
+
+        // 4. markdown
+        assert_eq!(parse_path("[link](./docs/README.md"), "./docs/README.md");
+        assert_eq!(parse_path("![img](/assets/logo.png"), "/assets/logo.png");
+
+        // 5. multi path in same line
+        assert_eq!(parse_path("from /tmp/a to /var/log/b"), "/var/log/b");
     }
 }
