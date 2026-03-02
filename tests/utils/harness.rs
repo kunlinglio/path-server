@@ -42,6 +42,10 @@ impl TestHarness {
         self.service.as_ref().unwrap().inner()
     }
 
+    pub fn root_path(&self) -> &PathBuf {
+        &self.root_path
+    }
+
     /// quick create file in workspace
     pub fn create_file(&self, rel_path: &str) {
         let full_path = self.root_path.join(rel_path);

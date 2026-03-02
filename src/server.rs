@@ -133,6 +133,7 @@ impl tower_lsp::LanguageServer for PathServer {
             })
             .unwrap_or("".into());
         let raw_path = parse_path(&line_prefix);
+        let file_path = params.text_document_position.text_document.uri;
         info(format!("Completing for prefix: '{}'", raw_path)).await;
 
         // 2. parse prefix into finished and remains
@@ -150,7 +151,6 @@ impl tower_lsp::LanguageServer for PathServer {
             base_dir
         };
         let base_dir = PathBuf::from(base_dir);
-
         // 3. fs access
         let mut completion_filenames: Vec<lsp_types::CompletionItem> = vec![];
         if base_dir.is_absolute() {
@@ -161,60 +161,59 @@ impl tower_lsp::LanguageServer for PathServer {
                     base_dir.display()
                 ))
                 .await;
-                return Ok(None);
-            }
-            if !base_dir.is_dir() {
+            } else if !base_dir.is_dir() {
                 info(format!(
                     "Base directory is not a directory: {}",
                     base_dir.display()
                 ))
                 .await;
-                return Ok(None);
-            }
-            let Ok(files) = base_dir.read_dir() else {
-                info(format!(
-                    "Failed to read base directory: {}",
-                    base_dir.display()
-                ))
-                .await;
-                return Ok(None);
-            };
-            for file in files {
-                let Ok(file) = file else {
+            } else {
+                if let Ok(files) = base_dir.read_dir() {
+                    for file in files {
+                        let Ok(file) = file else {
+                            info(format!(
+                                "Failed to read file in base directory: {}",
+                                base_dir.display()
+                            ))
+                            .await;
+                            continue;
+                        };
+                        let Ok(filename) = file.file_name().into_string() else {
+                            info(format!(
+                                "Failed to convert file name to string: {}",
+                                file.path().display()
+                            ))
+                            .await;
+                            continue;
+                        };
+                        if !filename.starts_with(&partial_name) {
+                            continue;
+                        }
+                        if file.path().is_dir() {
+                            completion_filenames.push(lsp_types::CompletionItem {
+                                label: filename,
+                                kind: Some(lsp_types::CompletionItemKind::FOLDER),
+                                ..Default::default()
+                            });
+                        } else {
+                            completion_filenames.push(lsp_types::CompletionItem {
+                                label: filename,
+                                kind: Some(lsp_types::CompletionItemKind::FILE),
+                                ..Default::default()
+                            });
+                        }
+                    }
+                } else {
                     info(format!(
-                        "Failed to read file in base directory: {}",
+                        "Failed to read base directory: {}",
                         base_dir.display()
                     ))
                     .await;
-                    continue;
                 };
-                let Ok(filename) = file.file_name().into_string() else {
-                    info(format!(
-                        "Failed to convert file name to string: {}",
-                        file.path().display()
-                    ))
-                    .await;
-                    continue;
-                };
-                if !filename.starts_with(&partial_name) {
-                    continue;
-                }
-                if file.path().is_dir() {
-                    completion_filenames.push(lsp_types::CompletionItem {
-                        label: filename,
-                        kind: Some(lsp_types::CompletionItemKind::FOLDER),
-                        ..Default::default()
-                    });
-                } else {
-                    completion_filenames.push(lsp_types::CompletionItem {
-                        label: filename,
-                        kind: Some(lsp_types::CompletionItemKind::FILE),
-                        ..Default::default()
-                    });
-                }
             }
         } else if base_dir.is_relative() {
             // b. relative path
+            // base on workspace roots
             let roots = self.workspace_root.read().await;
             for root in roots.iter() {
                 let Ok(root_path) = root.to_file_path() else {
@@ -263,16 +262,78 @@ impl tower_lsp::LanguageServer for PathServer {
                     }
                     if file.path().is_dir() {
                         completion_filenames.push(lsp_types::CompletionItem {
-                            label: filename,
+                            label: filename.clone(),
                             kind: Some(lsp_types::CompletionItemKind::FOLDER),
+                            detail: Some("From Workspace".to_string()),
+                            insert_text: Some(filename),
                             ..Default::default()
                         });
                     } else {
                         completion_filenames.push(lsp_types::CompletionItem {
-                            label: filename,
+                            label: filename.clone(),
                             kind: Some(lsp_types::CompletionItemKind::FILE),
+                            detail: Some("From Workspace".to_string()),
+                            insert_text: Some(filename),
                             ..Default::default()
                         });
+                    }
+                }
+            }
+            // base on current file url
+            if let Ok(file_path) = file_path.to_file_path() {
+                if let Some(parent) = file_path.parent() {
+                    let dir = parent.join(base_dir);
+                    if !dir.exists() {
+                        info(format!("Directory does not exist: {}", dir.display())).await;
+                    } else if !dir.is_dir() {
+                        info(format!("Directory is not a directory: {}", dir.display())).await;
+                    } else {
+                        if let Ok(files) = dir.read_dir() {
+                            for file in files {
+                                let Ok(file) = file else {
+                                    info(format!(
+                                        "Failed to read file in parent directory: {}",
+                                        dir.display()
+                                    ))
+                                    .await;
+                                    continue;
+                                };
+                                let Ok(filename) = file.file_name().into_string() else {
+                                    info(format!(
+                                        "Failed to convert file name to string: {}",
+                                        file.path().display()
+                                    ))
+                                    .await;
+                                    continue;
+                                };
+                                if !filename.starts_with(&partial_name) {
+                                    continue;
+                                }
+                                if file.path().is_dir() {
+                                    completion_filenames.push(lsp_types::CompletionItem {
+                                        label: filename.clone(),
+                                        kind: Some(lsp_types::CompletionItemKind::FOLDER),
+                                        detail: Some("From document".to_string()),
+                                        insert_text: Some(filename),
+                                        ..Default::default()
+                                    });
+                                } else {
+                                    completion_filenames.push(lsp_types::CompletionItem {
+                                        label: filename.clone(),
+                                        kind: Some(lsp_types::CompletionItemKind::FILE),
+                                        detail: Some("From document".to_string()),
+                                        insert_text: Some(filename),
+                                        ..Default::default()
+                                    });
+                                }
+                            }
+                        } else {
+                            info(format!(
+                                "Failed to read parent directory: {}",
+                                dir.display()
+                            ))
+                            .await;
+                        }
                     }
                 }
             }
