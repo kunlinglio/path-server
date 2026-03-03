@@ -1,10 +1,10 @@
 id = "path-server"
-name = "Path server"
-version = "0.0.1"
+name = "Path Server"
+version = "0.1.0"
 schema_version = 1
-authors = ["KunlingLio"]
-description = "A Zed extension that provides path auto completion for file paths in the editor."
-repository = "https://github.com/KunlingLio/path-server-zed"
+authors = ["kunlinglio"]
+description = "Path Intellisense like extension for zed, provides fast, real-time file path autocompletion in any language, powered by Path Server."
+repository = "https://github.com/kunlinglio/path-server-zed"
 
 [language_servers.path-server]
 name = "path-server"
