@@ -1,4 +1,6 @@
-pub mod document;
-pub mod logger;
-pub mod server;
+mod completion;
+mod document;
+mod logger;
+mod parser;
+mod server;
 pub use crate::server::PathServer;
