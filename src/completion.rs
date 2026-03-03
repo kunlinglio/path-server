@@ -31,10 +31,16 @@ pub async fn complete(
 
     // 2. fs access
     let mut completions: Vec<lsp_types::CompletionItem> = vec![];
+    let mut seen_labels: HashSet<String> = HashSet::new();
+    let ignore_labels: HashSet<String> = HashSet::from([".DS_Store".to_string()]); // TODO: support config ignores
     if base_dir.is_absolute() {
         // a. absolute path
         let absolute_completions = complete_absolute(&base_dir, &partial_name).await?;
-        completions.extend(absolute_completions);
+        for item in absolute_completions {
+            if seen_labels.insert(item.label.clone()) && !ignore_labels.contains(&item.label) {
+                completions.push(item);
+            }
+        }
     } else if base_dir.is_relative() {
         // b. relative path
         // base on workspace roots
@@ -42,7 +48,11 @@ pub async fn complete(
             let root_path = url_to_path(root)?;
             let rel_workspace_completions =
                 complete_relative(&base_dir, &partial_name, &root_path).await?;
-            completions.extend(rel_workspace_completions);
+            for item in rel_workspace_completions {
+                if seen_labels.insert(item.label.clone()) && !ignore_labels.contains(&item.label) {
+                    completions.push(item);
+                }
+            }
         }
         // base on current file url
         if let Ok(file_path) = url_to_path(current_file) {
@@ -54,12 +64,16 @@ pub async fn complete(
             };
             let rel_current_file_completions =
                 complete_relative(&base_dir, &partial_name, &parent).await?;
-            completions.extend(rel_current_file_completions);
+            for item in rel_current_file_completions {
+                if seen_labels.insert(item.label.clone()) && !ignore_labels.contains(&item.label) {
+                    completions.push(item);
+                }
+            }
         }
     } else {
         assert!(false, "Unreachable!");
     };
-    return Ok(completions);
+    return Ok(completions.into_iter().collect());
 }
 
 fn separate_prefix(prefix: &str) -> (String, String) {
@@ -177,16 +191,12 @@ async fn complete_relative(
             completions.push(lsp_types::CompletionItem {
                 label: filename.clone(),
                 kind: Some(lsp_types::CompletionItemKind::FOLDER),
-                detail: Some("From Workspace".to_string()),
-                insert_text: Some(filename),
                 ..Default::default()
             });
         } else {
             completions.push(lsp_types::CompletionItem {
                 label: filename.clone(),
                 kind: Some(lsp_types::CompletionItemKind::FILE),
-                detail: Some("From Workspace".to_string()),
-                insert_text: Some(filename),
                 ..Default::default()
             });
         }
@@ -276,13 +286,11 @@ mod tests {
         let mut found_dir = false;
         for item in rel_results {
             if item.label == "part.txt" {
-                assert_eq!(item.detail.as_deref(), Some("From Workspace"));
-                assert_eq!(item.insert_text.as_deref(), Some("part.txt"));
+                assert_eq!(item.label, "part.txt".to_string());
                 found_file = true;
             }
             if item.label == "parcel" {
-                assert_eq!(item.detail.as_deref(), Some("From Workspace"));
-                assert_eq!(item.insert_text.as_deref(), Some("parcel"));
+                assert_eq!(item.label, "parcel".to_string());
                 found_dir = true;
             }
         }
