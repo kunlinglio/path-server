@@ -70,7 +70,7 @@ impl tower_lsp::LanguageServer for PathServer {
     }
 
     async fn initialized(&self, _: lsp_types::InitializedParams) {
-        log(format!("Path Server initialized")).await;
+        log("Path Server initialized".to_string()).await;
     }
 
     async fn did_change_workspace_folders(

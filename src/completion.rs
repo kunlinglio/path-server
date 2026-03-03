@@ -12,7 +12,7 @@ pub async fn complete(
     current_file: &lsp_types::Url,
 ) -> PathServerResult<Vec<lsp_types::CompletionItem>> {
     // 1. separate prefix into finished and remains
-    let (base_dir, partial_name) = separate_prefix(&prefix);
+    let (base_dir, partial_name) = separate_prefix(prefix);
     debug(format!(
         "Detected base_dir: '{}', partial_name: '{}'",
         base_dir, partial_name
@@ -63,7 +63,7 @@ pub async fn complete(
                 )));
             };
             let rel_current_file_completions =
-                complete_relative(&base_dir, &partial_name, &parent).await?;
+                complete_relative(&base_dir, &partial_name, parent).await?;
             for item in rel_current_file_completions {
                 if seen_labels.insert(item.label.clone()) && !ignore_labels.contains(&item.label) {
                     completions.push(item);
@@ -71,9 +71,9 @@ pub async fn complete(
             }
         }
     } else {
-        assert!(false, "Unreachable!");
+        unreachable!()
     };
-    return Ok(completions.into_iter().collect());
+    Ok(completions.into_iter().collect())
 }
 
 fn separate_prefix(prefix: &str) -> (String, String) {
@@ -91,7 +91,7 @@ fn separate_prefix(prefix: &str) -> (String, String) {
     if base_dir.is_empty() {
         base_dir = "./".to_string();
     }
-    return (base_dir, partial_name);
+    (base_dir, partial_name)
 }
 
 fn url_to_path(url: &lsp_types::Url) -> PathServerResult<PathBuf> {
@@ -107,7 +107,7 @@ fn url_to_path(url: &lsp_types::Url) -> PathServerResult<PathBuf> {
 }
 
 async fn complete_absolute(
-    base_dir: &PathBuf,
+    base_dir: &Path,
     partial_name: &str,
 ) -> PathServerResult<Vec<lsp_types::CompletionItem>> {
     let mut completions: Vec<lsp_types::CompletionItem> = vec![];
@@ -136,7 +136,7 @@ async fn complete_absolute(
                 os_str.to_string_lossy()
             ))
         })?;
-        if !filename.starts_with(&partial_name) {
+        if !filename.starts_with(partial_name) {
             continue;
         }
         if file.path().is_dir() {
@@ -153,7 +153,7 @@ async fn complete_absolute(
             });
         }
     }
-    return Ok(completions);
+    Ok(completions)
 }
 
 async fn complete_relative(
@@ -162,7 +162,7 @@ async fn complete_relative(
     root: &Path,
 ) -> PathServerResult<Vec<lsp_types::CompletionItem>> {
     let mut completions: Vec<lsp_types::CompletionItem> = vec![];
-    let dir = root.join(&base_dir);
+    let dir = root.join(base_dir);
     if !dir.exists() {
         debug(format!("Base directory does not exist: {}", dir.display())).await;
         return Ok(vec![]);
@@ -184,7 +184,7 @@ async fn complete_relative(
                 os_str.to_string_lossy()
             ))
         })?;
-        if !filename.starts_with(&partial_name) {
+        if !filename.starts_with(partial_name) {
             continue;
         }
         if file.path().is_dir() {
@@ -201,7 +201,7 @@ async fn complete_relative(
             });
         }
     }
-    return Ok(completions);
+    Ok(completions)
 }
 
 #[cfg(test)]

@@ -51,9 +51,7 @@ impl Document {
         let line_end = if let Some(end_char) = end_char {
             position_to_offset(&self.index, line_number, end_char)?
         } else {
-            let next_line_start =
-                position_to_offset(&self.index, line_number + 1, 0).unwrap_or(self.text.len());
-            next_line_start
+            position_to_offset(&self.index, line_number + 1, 0).unwrap_or(self.text.len())
         };
 
         Ok(self.text[line_start..line_end].to_string())

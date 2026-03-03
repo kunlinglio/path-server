@@ -7,26 +7,26 @@ pub fn parse_line(line: &str) -> String {
     // handle unix
     let beginning_unix = [r#"~/"#, r#"\.\./"#, r#"\./"#];
     for prefix in beginning_unix {
-        if let Ok(re) = Regex::new(prefix) {
-            if let Some(mat) = re.find_iter(line).last() {
-                return line[mat.start()..].to_string();
-            }
+        if let Ok(re) = Regex::new(prefix)
+            && let Some(mat) = re.find_iter(line).last()
+        {
+            return line[mat.start()..].to_string();
         }
     }
     // special case for unix root "/"
     let root_regex = Regex::new(r#"(?:^|[\s"'\[(])(/)"#).unwrap();
-    if let Some(mat) = root_regex.find_iter(line).last() {
-        if let Some(pos) = line[mat.start()..mat.end()].find('/') {
-            return line[mat.start() + pos..].to_string();
-        }
+    if let Some(mat) = root_regex.find_iter(line).last()
+        && let Some(pos) = line[mat.start()..mat.end()].find('/')
+    {
+        return line[mat.start() + pos..].to_string();
     }
     // handle windows
     let beginning_windows = [r#"[a-zA-Z]:\\"#, r#"\.\\"#, r#"\.\.\\ "#];
     for regex in beginning_windows {
-        if let Ok(re) = Regex::new(regex) {
-            if let Some(mat) = re.find_iter(line).last() {
-                return line[mat.start()..].to_string();
-            }
+        if let Ok(re) = Regex::new(regex)
+            && let Some(mat) = re.find_iter(line).last()
+        {
+            return line[mat.start()..].to_string();
         }
     }
     // 2. parse by space
