@@ -2,6 +2,10 @@
 name = "path-server"
 version = "0.1.0"
 edition = "2024"
+description = "A fast and lightweight language server for path completion."
+license = "Apache-2.0"
+repository = "https://github.com/KunlingLio/path-server"
+readme = "README.md"
 
 [dependencies]
 line-index = "0.1.2"
