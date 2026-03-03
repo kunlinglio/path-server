@@ -6,8 +6,25 @@ on:
   pull_request:
     branches: [master]
   workflow_call:
-
 jobs:
+  lint:
+    name: Format and Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Run Format Check
+        run: cargo fmt --all -- --check
+
+      - name: Run Clippy
+        run: cargo clippy -- -D warnings
+
   # Test on 3 platforms
   test:
     name: Test on ${{ matrix.os }}

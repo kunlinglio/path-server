@@ -32,6 +32,12 @@ cargo fmt --all -- --check
 cargo clippy -- -D warnings
 ```
 
+### Try fix
+```bash
+cargo fix --allow-dirty
+cargo clippy --fix --allow-dirty
+```
+
 ## TODO
 - [ ] Support remote url.
 
