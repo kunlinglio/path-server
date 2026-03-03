@@ -146,7 +146,7 @@ impl tower_lsp::LanguageServer for PathServer {
         // 3. completion
         let file_path = params.text_document_position.text_document.uri;
         let workspace_roots = self.workspace_roots.read().await;
-        let completions = completion::complete(&raw_path, &workspace_roots, &file_path).await;
+        let completions = completion::complete(&raw_path, &workspace_roots, &file_path).await?;
 
         return Ok(Some(lsp_types::CompletionResponse::Array(completions)));
     }
