@@ -1,19 +1,29 @@
 # Path Server
-A fast and lightweight language server for path completion, go to definition and so on.
 
-## Support platforms
-### Build and test on
-- Windows x86_64
-- Linux x86_64
-- MacOS Aarch64
+Path Server is a fast and lightweight Language Server Protocol (LSP) implementation designed to provide path completion and navigation. 
 
-### Only Build on
-- Windows Aarch64
-- Linux Aarch64
-- Macos X86_64
+## Features
+- **Path Completion**: Provides real-time suggestions for both relative and absolute paths.
+- **Light Weight**: Consume only 10MB memory and very low cpu usage.
+- **Cross IDEs**: Works seamlessly with any editor that supports the Language Server Protocol (e.g., VS Code, Zed, Neovim).
+
+## Support Platforms
+
+| Platform | x86_64 | Aarch64 |
+| :--- | :--- | :--- |
+| **Windows** | Build & Test | Build Only |
+| **Linux** | Build & Test | Build Only |
+| **macOS** | Build Only | Build & Test |
+
+## Usage
+Typically, you don't need to run Path Server manually. It is intended to be used as a backend for editor extensions.
+
+- **VS Code**: To be supported.
+- **Zed**: Refer to the [Path Server zed extension](https://github.com/KunlingLio/path-server-zed) repository for integration details.
 
 ## Resources
-- [zed extension](https://github.com/KunlingLio/path-server-zed)
+- [GitHub Repository](https://github.com/KunlingLio/path-server)
+- [Zed Extension Integration](https://github.com/KunlingLio/path-server-zed)
 
 ## Development
 ### Build
@@ -39,5 +49,9 @@ cargo clippy --fix --allow-dirty
 ```
 
 ## TODO
-- [ ] Support remote url.
+- [x] Support relative and absolute path completion.
+- [ ] Implement "Go to Definition" for file paths.
+- [ ] Support remote URL.
 
+## License
+This project is licensed under the Apache License 2.0.
