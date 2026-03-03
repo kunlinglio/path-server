@@ -1,0 +1,92 @@
+name: Test and Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  # 1. Test on 3 platforms
+  call_test:
+    uses: ./.github/workflows/test.yaml
+
+  # 2. Build for 6 platforms
+  build:
+    name: Build on ${{ matrix.os }}
+    needs: call_test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            targets: "x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu"
+          - os: windows-latest
+            targets: "x86_64-pc-windows-msvc aarch64-pc-windows-msvc"
+          - os: macos-latest
+            targets: "x86_64-apple-darwin aarch64-apple-darwin"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Cross-compilation Tools only on Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+
+      - name: Build All Targets
+        run: |
+          mkdir -p dist
+          for target in ${{ matrix.targets }}; do
+            rustup target add $target
+            cargo build --release --target $target
+            
+            EXE_SUFFIX=""
+            if [[ "$target" == *"windows"* ]]; then
+              EXE_SUFFIX=".exe"
+            fi
+            
+            cp "target/$target/release/path-server$EXE_SUFFIX" "dist/path-server-${{ github.ref_name }}-$target$EXE_SUFFIX"
+          done
+        shell: bash
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.os }}
+          path: dist/*
+
+  # 3. Release
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          body: |
+            ## Path Server ${{ github.ref_name }}
+            See the [CHANGELOG.md](./CHANGELOG.md) for details.
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
