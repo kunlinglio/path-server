@@ -5,8 +5,16 @@ use zed_extension_api as zed;
 const EXECUTABLE_DIR: &str = "bin/";
 
 fn version_gt(a: &str, b: &str) -> bool {
-    let a = if a.starts_with('v') { &a[1..] } else { a };
-    let b = if b.starts_with('v') { &b[1..] } else { b };
+    let a = if let Some(a) = a.strip_prefix('v') {
+        a
+    } else {
+        a
+    };
+    let b = if let Some(b) = b.strip_prefix('v') {
+        b
+    } else {
+        b
+    };
     let a_parts: Vec<u32> = a.split('.').map(|s| s.parse().unwrap_or(0)).collect();
     let b_parts: Vec<u32> = b.split('.').map(|s| s.parse().unwrap_or(0)).collect();
 
@@ -55,10 +63,10 @@ impl PathServerExtension {
         }
 
         // 3. check if version higher than current
-        if let Some(current_version) = current_version {
-            if !version_gt(&release.version, current_version) {
-                return Ok(None);
-            }
+        if let Some(current_version) = current_version
+            && !version_gt(&release.version, current_version)
+        {
+            return Ok(None);
         }
 
         // executable naming: path-server-{version}-{target}
@@ -86,7 +94,7 @@ impl PathServerExtension {
 
         // 4. download executable
         let binary_path = format!("{EXECUTABLE_DIR}/{}", asset.name);
-        if !std::fs::metadata(&binary_path).map_or(false, |stat| stat.is_file()) {
+        if !std::fs::metadata(&binary_path).is_ok_and(|stat| stat.is_file()) {
             zed::set_language_server_installation_status(
                 language_server_id,
                 &zed::LanguageServerInstallationStatus::Downloading,
@@ -128,7 +136,7 @@ impl PathServerExtension {
                 }
             }
         };
-        return Ok(Some(release.version));
+        Ok(Some(release.version))
     }
 
     /// Find the highest version exists in EXECUTABLE_DIR
@@ -144,7 +152,7 @@ impl PathServerExtension {
                     let version = parts[2].to_string();
                     if max_version
                         .as_ref()
-                        .map_or(true, |max| version_gt(&version, max))
+                        .is_none_or(|max| version_gt(&version, max))
                     {
                         max_version = Some(version);
                     }
@@ -197,7 +205,7 @@ impl PathServerExtension {
                 break;
             }
         }
-        Ok(binary_path.ok_or("Binary not found.".to_string())?)
+        binary_path.ok_or("Binary not found.".to_string())
     }
 }
 
