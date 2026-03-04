@@ -1,5 +1,6 @@
 use regex::Regex;
 
+/// Parses a line of text and extracts the path from it.
 pub fn parse_line(line: &str) -> String {
     // 1. parse by beginning
     //    e.g. "D:" or ".\" or "..\" for windows
@@ -34,6 +35,25 @@ pub fn parse_line(line: &str) -> String {
         return line[pos + 1..].to_string();
     }
     line.to_string()
+}
+
+/// Separates an incomplete path (prefix) into a complete base directory and a partial name.
+pub fn separate_prefix(prefix: &str) -> (String, String) {
+    let prefix = prefix.to_string();
+    let last_slash = prefix.rfind('/');
+    let last_backslash = prefix.rfind('\\');
+    let (mut base_dir, partial_name) = if let Some(pos) = last_slash {
+        (prefix[..pos + 1].to_string(), prefix[pos + 1..].to_string())
+    } else if let Some(pos) = last_backslash {
+        (prefix[..pos + 1].to_string(), prefix[pos + 1..].to_string())
+    } else {
+        // no slash, e.g. index.htm
+        ("".to_string(), prefix)
+    };
+    if base_dir.is_empty() {
+        base_dir = "./".to_string();
+    }
+    (base_dir, partial_name)
 }
 
 #[cfg(test)]
@@ -124,5 +144,33 @@ mod test {
             parse_line("copy \\\\server\\share\\file.txt"),
             "\\\\server\\share\\file.txt"
         );
+    }
+
+    #[test]
+    fn test_separate_prefix() {
+        // unix style
+        let (base, partial) = separate_prefix("/home/user/file.txt");
+        assert_eq!(base, "/home/user/");
+        assert_eq!(partial, "file.txt");
+
+        // Windows style
+        let (base, partial) = separate_prefix(r"C:\Users\Admin\Doc");
+        assert_eq!(base, r"C:\Users\Admin\");
+        assert_eq!(partial, "Doc");
+
+        // only filename
+        let (base, partial) = separate_prefix("file.txt");
+        assert_eq!(base, "./");
+        assert_eq!(partial, "file.txt");
+
+        // only dir
+        let (base, partial) = separate_prefix("/usr/bin/");
+        assert_eq!(base, "/usr/bin/");
+        assert_eq!(partial, "");
+
+        // hidden file
+        let (base, partial) = separate_prefix("./.config");
+        assert_eq!(base, "./");
+        assert_eq!(partial, ".config");
     }
 }

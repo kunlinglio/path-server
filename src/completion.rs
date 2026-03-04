@@ -5,54 +5,35 @@ use tower_lsp::lsp_types;
 
 use crate::common::*;
 use crate::logger::*;
+use crate::parser;
 
 pub async fn complete(
     prefix: &str,
     workspace_roots: &HashSet<lsp_types::Url>,
     current_file: &lsp_types::Url,
 ) -> PathServerResult<Vec<lsp_types::CompletionItem>> {
-    // 1. separate prefix into finished and remains
-    let (base_dir, partial_name) = separate_prefix(prefix);
+    let (base_dir, partial_name) = parser::separate_prefix(prefix);
     debug(format!(
         "Detected base_dir: '{}', partial_name: '{}'",
         base_dir, partial_name
     ))
     .await;
-    // manual unfold "~"
-    let base_dir = if base_dir.starts_with("~/") {
-        let home = std::env::var("HOME").map_err(|e| {
-            PathServerError::Unknown(format!("Failed to get HOME environment variable: {}", e))
-        })?;
-        format!("{}{}", home, &base_dir[1..])
-    } else {
-        base_dir
-    };
+    let base_dir = expand_tilde(&base_dir)?;
     let base_dir = PathBuf::from(base_dir);
 
-    // 2. fs access
     let mut completions: Vec<lsp_types::CompletionItem> = vec![];
-    let mut seen_labels: HashSet<String> = HashSet::new();
-    let ignore_labels: HashSet<String> = HashSet::from([".DS_Store".to_string()]); // TODO: support config ignores
     if base_dir.is_absolute() {
-        // a. absolute path
+        // absolute path
         let absolute_completions = complete_absolute(&base_dir, &partial_name).await?;
-        for item in absolute_completions {
-            if seen_labels.insert(item.label.clone()) && !ignore_labels.contains(&item.label) {
-                completions.push(item);
-            }
-        }
+        completions.extend(absolute_completions);
     } else if base_dir.is_relative() {
-        // b. relative path
+        // relative path
         // base on workspace roots
         for root in workspace_roots.iter() {
             let root_path = url_to_path(root)?;
             let rel_workspace_completions =
                 complete_relative(&base_dir, &partial_name, &root_path).await?;
-            for item in rel_workspace_completions {
-                if seen_labels.insert(item.label.clone()) && !ignore_labels.contains(&item.label) {
-                    completions.push(item);
-                }
-            }
+            completions.extend(rel_workspace_completions);
         }
         // base on current file url
         if let Ok(file_path) = url_to_path(current_file) {
@@ -64,34 +45,12 @@ pub async fn complete(
             };
             let rel_current_file_completions =
                 complete_relative(&base_dir, &partial_name, parent).await?;
-            for item in rel_current_file_completions {
-                if seen_labels.insert(item.label.clone()) && !ignore_labels.contains(&item.label) {
-                    completions.push(item);
-                }
-            }
+            completions.extend(rel_current_file_completions);
         }
     } else {
         unreachable!()
     };
-    Ok(completions.into_iter().collect())
-}
-
-fn separate_prefix(prefix: &str) -> (String, String) {
-    let prefix = prefix.to_string();
-    let last_slash = prefix.rfind('/');
-    let last_backslash = prefix.rfind('\\');
-    let (mut base_dir, partial_name) = if let Some(pos) = last_slash {
-        (prefix[..pos + 1].to_string(), prefix[pos + 1..].to_string())
-    } else if let Some(pos) = last_backslash {
-        (prefix[..pos + 1].to_string(), prefix[pos + 1..].to_string())
-    } else {
-        // no slash, e.g. index.htm
-        ("".to_string(), prefix)
-    };
-    if base_dir.is_empty() {
-        base_dir = "./".to_string();
-    }
-    (base_dir, partial_name)
+    Ok(filter(completions))
 }
 
 fn url_to_path(url: &lsp_types::Url) -> PathServerResult<PathBuf> {
@@ -104,6 +63,31 @@ fn url_to_path(url: &lsp_types::Url) -> PathServerResult<PathBuf> {
     url.to_file_path().map_err(|_| {
         PathServerError::Unknown(format!("Failed to convert URL to file path: {}", url))
     })
+}
+
+/// Expand "~" to the user's home directory
+fn expand_tilde(path: &str) -> PathServerResult<String> {
+    let path = if path.starts_with("~/") {
+        let home = std::env::var("HOME").map_err(|e| {
+            PathServerError::Unknown(format!("Failed to get HOME environment variable: {}", e))
+        })?;
+        format!("{}{}", home, &path[1..])
+    } else {
+        path.to_string()
+    };
+    Ok(path)
+}
+
+/// Filter duplicated and ignored completions
+fn filter(completions: Vec<lsp_types::CompletionItem>) -> Vec<lsp_types::CompletionItem> {
+    let mut seen_labels: HashSet<String> = HashSet::new();
+    let ignore_labels: HashSet<String> = HashSet::from([".DS_Store".to_string()]); // TODO: support config ignores
+    completions
+        .into_iter()
+        .filter(|item| {
+            seen_labels.insert(item.label.clone()) && !ignore_labels.contains(&item.label)
+        })
+        .collect()
 }
 
 async fn complete_absolute(
@@ -207,34 +191,6 @@ async fn complete_relative(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_separate_prefix() {
-        // unix style
-        let (base, partial) = separate_prefix("/home/user/file.txt");
-        assert_eq!(base, "/home/user/");
-        assert_eq!(partial, "file.txt");
-
-        // Windows style
-        let (base, partial) = separate_prefix(r"C:\Users\Admin\Doc");
-        assert_eq!(base, r"C:\Users\Admin\");
-        assert_eq!(partial, "Doc");
-
-        // only filename
-        let (base, partial) = separate_prefix("file.txt");
-        assert_eq!(base, "./");
-        assert_eq!(partial, "file.txt");
-
-        // only dir
-        let (base, partial) = separate_prefix("/usr/bin/");
-        assert_eq!(base, "/usr/bin/");
-        assert_eq!(partial, "");
-
-        // hidden file
-        let (base, partial) = separate_prefix("./.config");
-        assert_eq!(base, "./");
-        assert_eq!(partial, ".config");
-    }
 
     #[test]
     fn test_url_to_path() {

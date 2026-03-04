@@ -129,7 +129,7 @@ impl tower_lsp::LanguageServer for PathServer {
         &self,
         params: lsp_types::CompletionParams,
     ) -> Result<Option<lsp_types::CompletionResponse>> {
-        // 1. get the line prefix
+        // get the line prefix
         let line_number = params.text_document_position.position.line as usize;
         let character = params.text_document_position.position.character as usize;
         let url = &params.text_document_position.text_document.uri.to_string();
@@ -139,11 +139,11 @@ impl tower_lsp::LanguageServer for PathServer {
         };
         let line_prefix = doc.get_line(line_number, Some(character))?;
 
-        // 2. parse the line
+        // parse the line
         let raw_path = parser::parse_line(&line_prefix);
         debug(format!("Completing for prefix: '{}'", raw_path)).await;
 
-        // 3. completion
+        // completion
         let file_path = params.text_document_position.text_document.uri;
         let workspace_roots = self.workspace_roots.read().await;
         let completions = completion::complete(&raw_path, &workspace_roots, &file_path).await?;
