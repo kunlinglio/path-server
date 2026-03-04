@@ -6,15 +6,13 @@ let client: languageClient.LanguageClient | undefined;
 export async function activate(context: vscode.ExtensionContext) {
     const debugMode = context.extensionMode === vscode.ExtensionMode.Development;
     const disposables = [];
-    // For debug
-    vscode.commands.registerCommand('path-server-vscode.helloWorld', () => {
-        vscode.window.showInformationMessage("Hello Word!");
-    });
-    const serverOutputChannel = vscode.window.createOutputChannel("Path Server Language Server");
+
+    const serverOutputChannel = vscode.window.createOutputChannel("Path Server Language Server", { log: true });
     disposables.push(serverOutputChannel);
     let traceChannel: vscode.OutputChannel | undefined = undefined;
     if (debugMode) {
         traceChannel = vscode.window.createOutputChannel("Path Server Language Server Trace");
+        traceChannel.appendLine("Debug mode enabled.");
         disposables.push(traceChannel);
     }
 
