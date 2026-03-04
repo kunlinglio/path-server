@@ -4,7 +4,8 @@ Path Server is a fast and lightweight Language Server Protocol (LSP) implementat
 
 ## Features
 - **Path Completion**: Provides real-time suggestions for both relative and absolute paths.
-- **Light Weight**: Consume only 10MB memory and very low cpu usage.
+- **Fast**: Response in "native" speed.
+- **Light Weight**: Consume only ~10MB memory and very low cpu usage.
 - **Cross IDEs**: Works seamlessly with any editor that supports the Language Server Protocol (e.g., VS Code, Zed, Neovim).
 
 ## Support Platforms
@@ -19,11 +20,11 @@ Path Server is a fast and lightweight Language Server Protocol (LSP) implementat
 Typically, you don't need to run Path Server manually. It is intended to be used as a backend for editor extensions.
 
 - **VS Code**: To be supported.
-- **Zed**: Refer to the [Path Server zed extension](https://github.com/KunlingLio/path-server-zed) repository for integration details.
+- **Zed**: Refer to the [Path Server zed extension](https://github.com/kunlinglio/path-server-zed) repository for integration details.
 
 ## Resources
-- [GitHub Repository](https://github.com/KunlingLio/path-server)
-- [Zed Extension Integration](https://github.com/KunlingLio/path-server-zed)
+- [GitHub Repository](https://github.com/kunlinglio/path-server)
+- [Zed Extension Integration](https://github.com/kunlinglio/path-server-zed)
 
 ## Development
 ### Build
@@ -54,4 +55,4 @@ cargo clippy --fix --allow-dirty
 - [ ] Support remote URL.
 
 ## License
-This project is licensed under the Apache License 2.0.
+Distributed under the terms of the Apache 2.0 license.
