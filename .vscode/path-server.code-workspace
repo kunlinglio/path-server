@@ -1,0 +1,16 @@
+{
+    "folders": [
+        {
+            "name": "Path Server",
+            "path": ".."
+        },
+        {
+            "name": "VS Code Extension",
+            "path": "../extensions/vscode"
+        },
+        {
+            "name": "Zed Extension",
+            "path": "../extensions/zed"
+        }
+    ],
+}

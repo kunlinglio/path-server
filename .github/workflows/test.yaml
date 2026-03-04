@@ -1,4 +1,4 @@
-name: Test
+name: Check and Test
 
 on:
   push:
@@ -7,8 +7,8 @@ on:
     branches: [master]
   workflow_call:
 jobs:
-  lint:
-    name: Format and Clippy
+  check-path-server:
+    name: Format and Clippy Path Server
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -25,9 +25,52 @@ jobs:
       - name: Run Clippy
         run: cargo clippy -- -D warnings
 
-  # Test on 3 platforms
-  test:
-    name: Test on ${{ matrix.os }}
+  check-zed-extension:
+    name: Format and Clippy Zed Extension
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Run Format Check
+        working-directory: ./extensions/zed
+        run: cargo fmt --all -- --check
+
+      - name: Run Clippy
+        working-directory: ./extensions/zed
+        run: cargo clippy -- -D warnings
+
+  check-vscode-extension:
+    name: Check VSCode Extension
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        working-directory: ./extensions/vscode
+        run: npm install
+
+      - name: Check types for VS Code Extension
+        working-directory: ./extensions/vscode
+        run: npm run check-types
+      - name: Lint VS Code Extension
+        working-directory: ./extensions/vscode
+        run: npm run lint
+
+  # Test Path Server on 3 platforms
+  test-path-server:
+    name: Test Path Server on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:

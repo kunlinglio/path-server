@@ -6,13 +6,14 @@ on:
       - "v*"
 
 jobs:
-  # 1. Test on 3 platforms
+  # Step 1: Check and Test
   call_test:
+    name: Check and Test before Release
     uses: ./.github/workflows/test.yaml
 
-  # 2. Build for 6 platforms
+  # Step 2: Build Rust Binaries and VS Code Extensions
   build:
-    name: Build on ${{ matrix.os }}
+    name: Build ${{ matrix.vscode_target }}
     needs: call_test
     runs-on: ${{ matrix.os }}
     strategy:
@@ -20,11 +21,23 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            targets: "x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu"
+            rust_target: x86_64-unknown-linux-gnu
+            vscode_target: linux-x64
+          - os: ubuntu-latest
+            rust_target: aarch64-unknown-linux-gnu
+            vscode_target: linux-arm64
           - os: windows-latest
-            targets: "x86_64-pc-windows-msvc aarch64-pc-windows-msvc"
+            rust_target: x86_64-pc-windows-msvc
+            vscode_target: win32-x64
+          - os: windows-latest
+            rust_target: aarch64-pc-windows-msvc
+            vscode_target: win32-arm64
           - os: macos-latest
-            targets: "x86_64-apple-darwin aarch64-apple-darwin"
+            rust_target: x86_64-apple-darwin
+            vscode_target: darwin-x64
+          - os: macos-latest
+            rust_target: aarch64-apple-darwin
+            vscode_target: darwin-arm64
 
     steps:
       - name: Checkout code
@@ -33,36 +46,54 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install Cross-compilation Tools only on Linux
-        if: runner.os == 'Linux'
+      - name: Install Cross-compilation Tools (Linux ARM64)
+        if: matrix.rust_target == 'aarch64-unknown-linux-gnu'
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu
           echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
 
-      - name: Build All Targets
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build Rust Target
+        run: |
+          rustup target add ${{ matrix.rust_target }}
+          cargo build --release --target ${{ matrix.rust_target }}
+        shell: bash
+
+      - name: Prepare Binaries and Package VSIX
         run: |
           mkdir -p dist
-          for target in ${{ matrix.targets }}; do
-            rustup target add $target
-            cargo build --release --target $target
-            
-            EXE_SUFFIX=""
-            if [[ "$target" == *"windows"* ]]; then
-              EXE_SUFFIX=".exe"
-            fi
-            
-            cp "target/$target/release/path-server$EXE_SUFFIX" "dist/path-server-${{ github.ref_name }}-$target$EXE_SUFFIX"
-          done
+          mkdir -p extensions/vscode/bin
+
+          EXE_SUFFIX=""
+          if [[ "${{ matrix.rust_target }}" == *"windows"* ]]; then
+            EXE_SUFFIX=".exe"
+          fi
+          BINARY_PATH="target/${{ matrix.rust_target }}/release/path-server$EXE_SUFFIX"
+
+          cp "$BINARY_PATH" "dist/path-server_${{ github.ref_name }}_${{ matrix.rust_target }}$EXE_SUFFIX"
+          cp "$BINARY_PATH" "extensions/vscode/bin/path-server$EXE_SUFFIX"
         shell: bash
+
+      - name: Install VS Code Extension Dependencies
+        working-directory: ./extensions/vscode
+        run: npm install
+
+      - name: Package VS Code Extension
+        working-directory: ./extensions/vscode
+        run: npm run build -- --target ${{ matrix.vscode_target }} -o ../../dist/path-server_${{ matrix.vscode_target }}_${{ github.ref_name }}.vsix
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: binaries-${{ matrix.os }}
+          name: release-assets-${{ matrix.vscode_target }}
           path: dist/*
 
-  # 3. Release
+  # Step 3: Create Release on GitHub
   release:
     name: Create GitHub Release
     needs: build
