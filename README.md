@@ -1,11 +1,11 @@
 # Path Server
 
-Path Server is a fast and lightweight Language Server Protocol (LSP) implementation designed to provide path completion and navigation. 
+Path Server is a fast and lightweight Language Server Protocol (LSP) implementation designed to provide path completion and navigation, offering a **Path Intellisense** experience.
 
 ## Features
 - **Path Completion**: Provides real-time suggestions for both relative and absolute paths.
-- **Fast**: Response in "native" speed.
-- **Light Weight**: Consume only ~10MB memory and very low cpu usage.
+- **Fast and Lightweight**: Native-level response speed and consume only ~10MB memory with very low cpu usage.
+- **Language Compatibility**: Support all text files discarding programming languages.
 - **Cross IDEs**: Works seamlessly with any editor that supports the Language Server Protocol (e.g., VS Code, Zed, Neovim).
 
 ## Support Platforms
@@ -17,41 +17,69 @@ Path Server is a fast and lightweight Language Server Protocol (LSP) implementat
 | **macOS** | Build Only | Build & Test |
 
 ## Usage
-Typically, you don't need to run Path Server manually. It is intended to be used as a backend for editor extensions.
+You can use it by installing specified extension for your editor.
 
-- **VS Code**: To be supported.
-- **Zed**: Refer to the [Path Server zed extension](https://github.com/kunlinglio/path-server-zed) repository for integration details.
+### VS Code
+To be supported.
+
+### Zed
+Search for `Path Server` in the Zed extensions catalog or install it via the "zed: install dev extension" command for local development. Start typing a path prefix like `./`, `/` or `C:` in any file to trigger suggestions.
 
 ## Resources
 - [GitHub Repository](https://github.com/kunlinglio/path-server)
-- [Zed Extension Integration](https://github.com/kunlinglio/path-server-zed)
 
 ## Development
-### Build
+### Develop: Path Server binary
+#### Build
 ```shell
 cargo build --release
 ```
 
-### Run test
+#### Run test
 ```shell
 cargo test
 ```
 
-### Run check
+#### Run check
 ```bash
 cargo fmt --all -- --check
 cargo clippy -- -D warnings
 ```
 
-### Try fix
+#### Try fix warnings
 ```bash
 cargo fix --allow-dirty
 cargo clippy --fix --allow-dirty
 ```
 
+### Develop: Zed extension
+#### Switch to directory
+```bash
+cd extensions/zed
+```
+
+#### Install as dev extension
+1. Open Zed editor.
+2. Toggle the Command Palette (`Ctrl + Shift + P` on Windows/Linux, `Cmd + Shift + P` on macOS).
+3. Run `zed: install dev extension`.
+4. Select this path-server/extensions/zed folder.
+
+### Develop: VS Code extension
+#### Switch to directory
+```bash
+cd extensions/zed
+```
+
+#### Run dev extension
+1. Open workspace with VS Code (Use VS Code to open `.vscode/path-server.code-workspace`)
+2. Toggle the Command Palette (`Ctrl + Shift + P` on Windows/Linux, `Cmd + Shift + P` on macOS).
+3. Run `Debug: Select and Start Debugging`.
+4. Select `Run Extension (VS Code Extension)`
+
 ## TODO
 - [x] Support relative and absolute path completion.
 - [ ] Implement "Go to Definition" for file paths.
+- [ ] Support path highlight.
 - [ ] Support remote URL.
 
 ## License
