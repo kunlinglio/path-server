@@ -39,6 +39,7 @@
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
     "test": "vscode-test",
+    "build:test-server": "node scripts/build_server.js",
     "build": "npx rimraf ./dist && npx shx cp ../../README.md ./ && npx vsce package"
   },
   "devDependencies": {

@@ -1,7 +1,17 @@
+import * as os from 'os';
+import * as path from 'path';
+
 import * as vscode from 'vscode';
 import * as languageClient from 'vscode-languageclient/node';
 
 let client: languageClient.LanguageClient | undefined;
+
+function binaryPath(context: vscode.ExtensionContext): string {
+    const ext = os.platform() === 'win32' ? '.exe' : '';
+    const binaryPath = context.asAbsolutePath(path.join('bin', `path-server${ext}`));
+
+    return binaryPath;
+}
 
 export async function activate(context: vscode.ExtensionContext) {
     const debugMode = context.extensionMode === vscode.ExtensionMode.Development;
@@ -16,7 +26,7 @@ export async function activate(context: vscode.ExtensionContext) {
         disposables.push(traceChannel);
     }
 
-    const serverPath = "/Users/lkl/Code/path-server/target/debug/path-server";
+    const serverPath = binaryPath(context);
     const serverExecutable: languageClient.Executable = {
         command: serverPath
     };
