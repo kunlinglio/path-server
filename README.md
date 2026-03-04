@@ -29,6 +29,9 @@ Search for `Path Server` in the Zed extensions catalog or install it via the "ze
 - [GitHub Repository](https://github.com/kunlinglio/path-server)
 
 ## Development
+### Open with multi-root workspace
+If you are using VS Code, you can open this repository with multiple root folders by open `.vscode/path-server.code-workspace` file.
+
 ### Develop: Path Server binary
 #### Build
 ```shell
