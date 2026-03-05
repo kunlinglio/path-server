@@ -9,8 +9,9 @@ use crate::parser;
 
 pub async fn complete(
     prefix: &str,
-    workspace_roots: &HashSet<lsp_types::Url>,
-    current_file: &lsp_types::Url,
+    workspace_roots: &HashSet<PathBuf>,
+    current_file: &PathBuf,
+    max_completions: usize,
 ) -> PathServerResult<Vec<lsp_types::CompletionItem>> {
     let (base_dir, partial_name) = parser::separate_prefix(prefix);
     debug(format!(
@@ -29,40 +30,25 @@ pub async fn complete(
     } else if base_dir.is_relative() {
         // relative path
         // base on workspace roots
-        for root in workspace_roots.iter() {
-            let root_path = url_to_path(root)?;
+        for root_path in workspace_roots.iter() {
             let rel_workspace_completions =
                 complete_relative(&base_dir, &partial_name, &root_path).await?;
             completions.extend(rel_workspace_completions);
         }
         // base on current file url
-        if let Ok(file_path) = url_to_path(current_file) {
-            let Some(parent) = file_path.parent() else {
-                return Err(PathServerError::Unknown(format!(
-                    "Failed to get parent directory of current file: {}",
-                    current_file
-                )));
-            };
-            let rel_current_file_completions =
-                complete_relative(&base_dir, &partial_name, parent).await?;
-            completions.extend(rel_current_file_completions);
-        }
+        let Some(parent) = current_file.parent() else {
+            return Err(PathServerError::Unknown(format!(
+                "Failed to get parent directory of current file: {}",
+                current_file.display()
+            )));
+        };
+        let rel_current_file_completions =
+            complete_relative(&base_dir, &partial_name, parent).await?;
+        completions.extend(rel_current_file_completions);
     } else {
         unreachable!()
     };
-    Ok(filter(completions))
-}
-
-fn url_to_path(url: &lsp_types::Url) -> PathServerResult<PathBuf> {
-    if url.scheme() != "file" {
-        return Err(PathServerError::Unsupported(format!(
-            "Non-local url is not supported: {}",
-            url
-        )));
-    }
-    url.to_file_path().map_err(|_| {
-        PathServerError::Unknown(format!("Failed to convert URL to file path: {}", url))
-    })
+    Ok(filter(completions, max_completions))
 }
 
 /// Expand "~" to the user's home directory
@@ -79,14 +65,23 @@ fn expand_tilde(path: &str) -> PathServerResult<String> {
 }
 
 /// Filter duplicated and ignored completions
-fn filter(completions: Vec<lsp_types::CompletionItem>) -> Vec<lsp_types::CompletionItem> {
+fn filter(
+    completions: Vec<lsp_types::CompletionItem>,
+    max_completions: usize,
+) -> Vec<lsp_types::CompletionItem> {
     let mut seen_labels: HashSet<String> = HashSet::new();
     let ignore_labels: HashSet<String> = HashSet::from([".DS_Store".to_string()]); // TODO: support config ignores
+    let max_completions = if max_completions == 0 {
+        usize::MAX
+    } else {
+        max_completions
+    };
     completions
         .into_iter()
         .filter(|item| {
             seen_labels.insert(item.label.clone()) && !ignore_labels.contains(&item.label)
         })
+        .take(max_completions)
         .collect()
 }
 
@@ -191,26 +186,6 @@ async fn complete_relative(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_url_to_path() {
-        // valid file url
-        #[cfg(not(windows))]
-        let url_str = "file:///tmp";
-        #[cfg(windows)]
-        let url_str = "file:///C:/tmp";
-        let url = lsp_types::Url::parse(url_str).unwrap();
-        let path = url_to_path(&url).unwrap();
-        assert!(path.ends_with("tmp"));
-
-        // non-file scheme should error
-        let url = lsp_types::Url::parse("http://example.com").unwrap();
-        let err = url_to_path(&url).unwrap_err();
-        match err {
-            PathServerError::Unsupported(_) => {}
-            _ => assert!(false, "expected Unsupported error, got: {}", err),
-        }
-    }
 
     #[tokio::test]
     async fn test_complete_absolute() {

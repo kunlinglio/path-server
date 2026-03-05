@@ -492,6 +492,7 @@ version = "0.2.0"
 dependencies = [
  "line-index",
  "regex",
+ "serde",
  "serde_json",
  "tempfile",
  "thiserror",

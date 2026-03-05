@@ -8,6 +8,7 @@ All notable changes to the Path Server will be documented in this file.
 
 ### Added
 - **Core**: Add version log during initialization.
+- **Core**: Add configuration support.
 
 ## [0.2.0] - 2026-03-04
 ### Added
