@@ -43,7 +43,7 @@
     "lint": "eslint src",
     "test": "vscode-test",
     "build:test-server": "node scripts/build_server.js",
-    "build": "npx rimraf ./dist && npx shx cp ../../README.md ./ && npx vsce package"
+    "build": "npx rimraf ./dist && npx shx cp ../../README.md ./ && npx shx cp ../../LICENSE ./ && npx vsce package"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
