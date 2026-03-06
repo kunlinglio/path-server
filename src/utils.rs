@@ -1,7 +1,8 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+use tower_lsp::lsp_types;
 
 use crate::common::*;
-use tower_lsp::lsp_types;
 
 pub fn url_to_path(url: &lsp_types::Url) -> PathServerResult<PathBuf> {
     if url.scheme() != "file" {
@@ -13,6 +14,29 @@ pub fn url_to_path(url: &lsp_types::Url) -> PathServerResult<PathBuf> {
     url.to_file_path().map_err(|_| {
         PathServerError::Unknown(format!("Failed to convert URL to file path: {}", url))
     })
+}
+
+pub fn is_hidden_file(path: &Path) -> PathServerResult<bool> {
+    let Some(is_unix_hidden) = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| name.starts_with('.'))
+    else {
+        return Err(PathServerError::Unknown(format!(
+            "{} do not contained file name, cannot check hidden or not",
+            path.display()
+        )));
+    };
+    if is_unix_hidden {
+        return Ok(true);
+    }
+    #[cfg(windows)]
+    {
+        if hf::is_hidden(path)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 // pub fn path_to_url(path: &PathBuf) -> PathServerResult<lsp_types::Url> {

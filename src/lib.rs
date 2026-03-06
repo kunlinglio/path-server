@@ -1,6 +1,6 @@
 mod common;
 mod completion;
-mod config;
+pub mod config;
 mod document;
 mod logger;
 mod parser;

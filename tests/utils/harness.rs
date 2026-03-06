@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use path_server::PathServer;
+use path_server::config::Config;
 use std::fs::{self, File};
 use std::path::PathBuf;
 use tower_lsp::lsp_types::*;
@@ -48,6 +49,11 @@ impl TestHarness {
         &self.root_path
     }
 
+    /// override server config for testing
+    pub async fn set_config(&self, config: Config) {
+        self.get_server().set_test_config(config).await;
+    }
+
     /// quick create file in workspace
     pub fn create_file(&self, rel_path: &str) {
         let full_path = self.root_path.join(rel_path);
@@ -71,6 +77,32 @@ impl TestHarness {
             })
             .await;
         uri
+    }
+
+    /// get completion items
+    pub async fn completion_items(
+        &self,
+        uri: &Url,
+        line: u32,
+        character: u32,
+    ) -> Vec<CompletionItem> {
+        let params = CompletionParams {
+            text_document_position: TextDocumentPositionParams {
+                text_document: TextDocumentIdentifier { uri: uri.clone() },
+                position: Position { line, character },
+            },
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default(),
+            context: None,
+        };
+
+        let result = self.get_server().completion(params).await.unwrap();
+
+        match result {
+            Some(CompletionResponse::Array(items)) => items,
+            Some(CompletionResponse::List(list)) => list.items,
+            None => vec![],
+        }
     }
 
     /// test completion

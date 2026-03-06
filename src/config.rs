@@ -69,7 +69,11 @@ impl Default for Config {
             completion: Completion {
                 max_results: 0,
                 show_hidden_files: true,
-                exclude: vec!["**/node_modules/**".into(), "**/.git/**".into()],
+                exclude: vec![
+                    "**/node_modules/**".into(),
+                    "**/.git/**".into(),
+                    "**/.DS_Store".into(),
+                ],
                 base_path: vec!["${workspaceFolder}".into(), "${document}".into()],
             },
         }
@@ -122,7 +126,7 @@ mod tests {
         assert!(cfg.completion.show_hidden_files);
         assert_eq!(
             cfg.completion.exclude,
-            vec!["**/node_modules/**", "**/.git/**"]
+            vec!["**/node_modules/**", "**/.git/**", "**/.DS_Store"]
         );
         assert_eq!(
             cfg.completion.base_path,

@@ -20,7 +20,10 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub struct PathServer {
     client: tower_lsp::Client,
     workspace_roots: RwLock<HashSet<PathBuf>>,
-    documents: Mutex<HashMap<PathBuf, Document>>, // url -> document
+    /// url -> document
+    documents: Mutex<HashMap<PathBuf, Document>>,
+    /// To override configuration from lsp client
+    config_override: RwLock<Option<config::Config>>,
 }
 
 impl PathServer {
@@ -30,7 +33,20 @@ impl PathServer {
             client,
             workspace_roots: RwLock::new(HashSet::new()),
             documents: Mutex::new(HashMap::new()),
+            config_override: RwLock::new(None),
         }
+    }
+
+    async fn get_config(&self) -> config::Config {
+        if let Some(cfg) = self.config_override.read().await.clone() {
+            return cfg;
+        }
+        config::get(&self.client).await
+    }
+
+    pub async fn set_test_config(&self, cfg: config::Config) {
+        let mut guard = self.config_override.write().await;
+        *guard = Some(cfg);
     }
 }
 
@@ -203,7 +219,7 @@ impl tower_lsp::LanguageServer for PathServer {
         debug(format!("Completing for prefix: '{}'", raw_path)).await;
 
         // completion
-        let completion_config = config::get(&self.client).await.completion;
+        let completion_config = self.get_config().await.completion;
         let Ok(file_path) = url_to_path(&params.text_document_position.text_document.uri) else {
             info(format!(
                 "Failed to convert URI to file path: {}",

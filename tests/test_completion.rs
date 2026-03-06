@@ -1,5 +1,5 @@
 mod utils;
-use utils::*;
+use crate::utils::*;
 
 #[tokio::test]
 async fn test_simple_relative_completion() {

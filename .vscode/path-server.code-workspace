@@ -2,7 +2,7 @@
     "folders": [
         {
             "name": "Path Server",
-            "path": ".."
+            "path": "..",
         },
         {
             "name": "VS Code Extension",

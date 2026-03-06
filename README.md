@@ -56,7 +56,7 @@ You can customize Path Server's behavior via your editor's settings.
 | :--- | :--- | :--- | :--- |
 | `path-server.completion.maxResults` | Number | `0` | Max results shown in completion. `0` indicates no limit. |
 | `path-server.completion.showHiddenFiles` | Boolean | `true` | Whether to show hidden files in completion. |
-| `path-server.completion.exclude` | Array | `["**/node_modules/**", "**/.git/**"]` | List of paths to exclude from completion. Supports glob patterns. |
+| `path-server.completion.exclude` | Array | `["**/node_modules/**", "**/.git/**", "**/.DS_Store"]` | List of paths to exclude from completion. Supports glob patterns. |
 | `path-server.completion.basePath` | Array | `["${workspaceFolder}", "${document}"]` | Base paths for relative path completion. You can use `${workspaceFolder}`, `${document}`, and `${userHome}` as placeholders. |
 
 
@@ -126,7 +126,6 @@ cd extensions/zed
 - [x] Support relative and absolute path completion.
 - [x] Support customizable configurations.
 - [ ] Automatically trigger next completion.
-- [ ] Support configurations.
 - [ ] Implement "Go to Definition" for file paths.
 - [ ] Support path highlight.
 - [ ] Support remote URL.
