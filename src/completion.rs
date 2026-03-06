@@ -97,7 +97,7 @@ async fn filter(
     let mut builder = GlobSetBuilder::new();
     for pattern in exclude_patterns {
         let Ok(glob) = Glob::new(pattern) else {
-            info(format!(
+            warn(format!(
                 "Invalid glob pattern in config.completion.exclude: {}, ignoring",
                 pattern
             ))
@@ -109,7 +109,7 @@ async fn filter(
     let exclude_set = match builder.build() {
         Ok(set) => set,
         Err(e) => {
-            info(format!(
+            warn(format!(
                 "Failed to build exclude set: {}, ignoring exclusions",
                 e
             ))

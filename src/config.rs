@@ -96,7 +96,7 @@ pub async fn get(client: &tower_lsp::Client) -> Config {
         }])
         .await;
     let Ok(configs) = configs else {
-        info(format!(
+        warn(format!(
             "Failed to get configuration:{}, use default",
             configs.unwrap_err()
         ))
@@ -105,7 +105,7 @@ pub async fn get(client: &tower_lsp::Client) -> Config {
     };
     assert!(configs.len() == 1);
     let Ok(config) = Config::try_from(configs[0].clone()) else {
-        info(format!(
+        warn(format!(
             "Failed to parse configuration:{}, use default",
             configs[0].clone()
         ))
