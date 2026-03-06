@@ -4,8 +4,8 @@ Path Server is a fast and lightweight Language Server Protocol (LSP) implementat
 
 ## Features
 - **Path Completion**: Provides real-time suggestions for both relative and absolute paths.
-- **Fast and Lightweight**: Native-level response speed and consume only ~10MB memory with very low cpu usage.
-- **Language Compatibility**: Support all text files discarding programming languages.
+- **Fast and Lightweight**: Native-level response speed. Consumes only ~5MB memory with very low CPU usage.
+- **Language Compatibility**: Supports all text files, regardless of the programming language.
 - **Cross IDEs**: Works seamlessly with any editor that supports the Language Server Protocol (e.g., VS Code, Zed, Neovim).
 
 ## Support Platforms
@@ -20,18 +20,58 @@ Path Server is a fast and lightweight Language Server Protocol (LSP) implementat
 You can use it by installing specified extension for your editor.
 
 ### VS Code
-Search for `Path Server` in the VS Code extensions marketplace or download `.vsix` file and install it manually. Start typing a path prefix like `./`, `/` or `C:` in any file to trigger suggestions.
+1. Search for `Path Server` in the VS Code extensions marketplace or download `.vsix` file from [Releases](https://github.com/kunlinglio/path-server/releases) and install it manually. 
+2. Start typing a path prefix like `./`, `/` or `C:` in any file to trigger suggestions.
+3. Open the settings and search for `path-server` or use the command `Path Server: Open Configuration` to customize the configuration options.
 
-You can toggle Output panel and choose `Path Server Language Server` to view detailed logs.
+*You can toggle Output panel and choose `Path Server Language Server` to view detailed logs.*
 
 ### Zed
-Search for `Path Server` in the Zed extensions catalog. Start typing a path prefix like `./`, `/` or `C:` in any file to trigger suggestions.
+1. Search for `Path Server` in the Zed extensions catalog. 
+2. Start typing a path prefix like `./`, `/` or `C:` in any file to trigger suggestions.
+3. Toggle command panel and input `zed: open settings file` to edit settings. You can add configuration options there. For example:
+```json
+{
+  // ...other configs...
+  "lsp": {
+    "path-server": {
+      "settings": {
+        "completion": {
+          "maxResults": 5,
+          "showHiddenFiles": false,
+          "exclude": ["**/node_modules/**", "**/.git/**"],
+          "basePath": ["${workspaceFolder}", "${root}"]
+        }
+      }
+    }
+  }
+  // ...other configs...
+}
+```
+
+### Configuration
+You can customize Path Server's behavior via your editor's settings.
+
+| Property | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `path-server.completion.maxResults` | Number | `0` | Max results shown in completion. `0` indicates no limit. |
+| `path-server.completion.showHiddenFiles` | Boolean | `true` | Whether to show hidden files in completion. |
+| `path-server.completion.exclude` | Array | `["**/node_modules/**", "**/.git/**"]` | List of paths to exclude from completion. Supports glob patterns. |
+| `path-server.completion.basePath` | Array | `["${workspaceFolder}", "${document}"]` | Base paths for relative path completion. You can use `${workspaceFolder}`, `${document}`, and `${userHome}` as placeholders. |
+
 
 ## Resources
 - [GitHub Repository](https://github.com/kunlinglio/path-server)
 - [VS Code Extension](https://marketplace.visualstudio.com/items?itemName=LKL.path-server)
 
 ## Development
+### File Structure
+The **Path Server** project is organized in mono-repository structure with core LSP server implementation and extensions for different editors.
+
+- The core LSP server implementation is located in the repository root.
+- The **Zed Extension** is located in `./extensions/zed`.
+- The **VS Code** is located in `./extensions/vscode`.
+
 ### Open with multi-root workspace
 If you are using VS Code, you can open this repository with multiple root folders by open `.vscode/path-server.code-workspace` file.
 
@@ -84,11 +124,13 @@ cd extensions/zed
 
 ## TODO
 - [x] Support relative and absolute path completion.
+- [x] Support customizable configurations.
 - [ ] Automatically trigger next completion.
 - [ ] Support configurations.
 - [ ] Implement "Go to Definition" for file paths.
 - [ ] Support path highlight.
 - [ ] Support remote URL.
+- [ ] **Zed**: Support all language by use "wildcard" in extension.toml (Waiting for Zed extension api support)
 
 ## License
 Distributed under the terms of the Apache 2.0 license.

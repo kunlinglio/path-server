@@ -3,7 +3,7 @@ name = "Path Server"
 version = "0.2.0"
 schema_version = 1
 authors = ["kunlinglio"]
-description = "Path Intellisense like extension for zed, provides fast, real-time file path autocompletion in any language, powered by Path Server."
+description = "Path Intellisense like extension for zed, provides fast, real-time file path auto-completion in any language, powered by Path Server."
 repository = "https://github.com/kunlinglio/path-server"
 
 [language_servers.path-server]

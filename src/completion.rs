@@ -1,16 +1,20 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+use globset::{Glob, GlobSet, GlobSetBuilder};
+use hf::is_hidden;
 use tower_lsp::lsp_types;
 
 use crate::common::*;
+use crate::config;
 use crate::logger::*;
 use crate::parser;
 
 pub async fn complete(
     prefix: &str,
-    workspace_roots: &HashSet<lsp_types::Url>,
-    current_file: &lsp_types::Url,
+    workspace_roots: &HashSet<PathBuf>,
+    current_file: &Path,
+    completion_config: &config::Completion,
 ) -> PathServerResult<Vec<lsp_types::CompletionItem>> {
     let (base_dir, partial_name) = parser::separate_prefix(prefix);
     debug(format!(
@@ -24,45 +28,45 @@ pub async fn complete(
     let mut completions: Vec<lsp_types::CompletionItem> = vec![];
     if base_dir.is_absolute() {
         // absolute path
-        let absolute_completions = complete_absolute(&base_dir, &partial_name).await?;
+        let absolute_completions = complete_absolute(
+            &base_dir,
+            &partial_name,
+            completion_config.show_hidden_files,
+        )
+        .await?;
         completions.extend(absolute_completions);
     } else if base_dir.is_relative() {
         // relative path
-        // base on workspace roots
-        for root in workspace_roots.iter() {
-            let root_path = url_to_path(root)?;
-            let rel_workspace_completions =
-                complete_relative(&base_dir, &partial_name, &root_path).await?;
-            completions.extend(rel_workspace_completions);
+        let workspace_folders = workspace_roots
+            .iter()
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        let parent = current_file
+            .parent()
+            .map(|p| p.to_string_lossy().into_owned());
+        let home = std::env::var("HOME").ok();
+        let base_paths = completion_config.iter_base_path(&workspace_folders, &parent, &home);
+        let mut rel_completions = vec![];
+        for base_path in base_paths {
+            let completions = complete_relative(
+                &base_dir,
+                &partial_name,
+                &base_path,
+                completion_config.show_hidden_files,
+            )
+            .await?;
+            rel_completions.extend(completions);
         }
-        // base on current file url
-        if let Ok(file_path) = url_to_path(current_file) {
-            let Some(parent) = file_path.parent() else {
-                return Err(PathServerError::Unknown(format!(
-                    "Failed to get parent directory of current file: {}",
-                    current_file
-                )));
-            };
-            let rel_current_file_completions =
-                complete_relative(&base_dir, &partial_name, parent).await?;
-            completions.extend(rel_current_file_completions);
-        }
+        completions.extend(rel_completions);
     } else {
         unreachable!()
     };
-    Ok(filter(completions))
-}
-
-fn url_to_path(url: &lsp_types::Url) -> PathServerResult<PathBuf> {
-    if url.scheme() != "file" {
-        return Err(PathServerError::Unsupported(format!(
-            "Non-local url is not supported: {}",
-            url
-        )));
-    }
-    url.to_file_path().map_err(|_| {
-        PathServerError::Unknown(format!("Failed to convert URL to file path: {}", url))
-    })
+    Ok(filter(
+        completions,
+        completion_config.max_results,
+        &completion_config.exclude,
+    )
+    .await)
 }
 
 /// Expand "~" to the user's home directory
@@ -79,20 +83,57 @@ fn expand_tilde(path: &str) -> PathServerResult<String> {
 }
 
 /// Filter duplicated and ignored completions
-fn filter(completions: Vec<lsp_types::CompletionItem>) -> Vec<lsp_types::CompletionItem> {
+async fn filter(
+    completions: Vec<lsp_types::CompletionItem>,
+    max_completions: usize,
+    exclude_patterns: &[String],
+) -> Vec<lsp_types::CompletionItem> {
+    let mut builder = GlobSetBuilder::new();
+    for pattern in exclude_patterns {
+        let Ok(glob) = Glob::new(pattern) else {
+            info(format!(
+                "Invalid glob pattern in config.completion.exclude: {}, ignoring",
+                pattern
+            ))
+            .await;
+            continue;
+        };
+        builder.add(glob);
+    }
+    let exclude_set = match builder.build() {
+        Ok(set) => set,
+        Err(e) => {
+            info(format!(
+                "Failed to build exclude set: {}, ignoring exclusions",
+                e
+            ))
+            .await;
+            GlobSet::new(vec![Glob::new("").unwrap()]).unwrap()
+        }
+    };
+
     let mut seen_labels: HashSet<String> = HashSet::new();
     let ignore_labels: HashSet<String> = HashSet::from([".DS_Store".to_string()]); // TODO: support config ignores
+    let max_completions = if max_completions == 0 {
+        usize::MAX
+    } else {
+        max_completions
+    };
+
     completions
         .into_iter()
         .filter(|item| {
             seen_labels.insert(item.label.clone()) && !ignore_labels.contains(&item.label)
         })
+        .filter(|item| !exclude_set.is_match(&item.label))
+        .take(max_completions)
         .collect()
 }
 
 async fn complete_absolute(
     base_dir: &Path,
     partial_name: &str,
+    show_hidden_files: bool,
 ) -> PathServerResult<Vec<lsp_types::CompletionItem>> {
     let mut completions: Vec<lsp_types::CompletionItem> = vec![];
     if !base_dir.exists() {
@@ -123,6 +164,9 @@ async fn complete_absolute(
         if !filename.starts_with(partial_name) {
             continue;
         }
+        if !show_hidden_files && is_hidden(file.path())? {
+            continue;
+        }
         if file.path().is_dir() {
             completions.push(lsp_types::CompletionItem {
                 label: filename,
@@ -144,6 +188,7 @@ async fn complete_relative(
     base_dir: &PathBuf,
     partial_name: &str,
     root: &Path,
+    show_hidden_files: bool,
 ) -> PathServerResult<Vec<lsp_types::CompletionItem>> {
     let mut completions: Vec<lsp_types::CompletionItem> = vec![];
     let dir = root.join(base_dir);
@@ -171,6 +216,9 @@ async fn complete_relative(
         if !filename.starts_with(partial_name) {
             continue;
         }
+        if !show_hidden_files && is_hidden(file.path())? {
+            continue;
+        }
         if file.path().is_dir() {
             completions.push(lsp_types::CompletionItem {
                 label: filename.clone(),
@@ -191,27 +239,105 @@ async fn complete_relative(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::env;
 
-    #[test]
-    fn test_url_to_path() {
-        // valid file url
-        #[cfg(not(windows))]
-        let url_str = "file:///tmp";
-        #[cfg(windows)]
-        let url_str = "file:///C:/tmp";
-        let url = lsp_types::Url::parse(url_str).unwrap();
-        let path = url_to_path(&url).unwrap();
-        assert!(path.ends_with("tmp"));
+    #[tokio::test]
+    async fn test_complete() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
 
-        // non-file scheme should error
-        let url = lsp_types::Url::parse("http://example.com").unwrap();
-        let err = url_to_path(&url).unwrap_err();
-        match err {
-            PathServerError::Unsupported(_) => {}
-            _ => assert!(false, "expected Unsupported error, got: {}", err),
-        }
+        // workspace + files
+        std::fs::create_dir_all(root.join("data")).unwrap();
+        std::fs::File::create(root.join("data").join("a.txt")).unwrap();
+        std::fs::File::create(root.join("data").join("b.log")).unwrap();
+
+        let mut roots = HashSet::new();
+        roots.insert(root.to_path_buf());
+        let current_file = root.join("src").join("main.rs");
+        std::fs::create_dir_all(current_file.parent().unwrap()).unwrap();
+        std::fs::File::create(&current_file).unwrap();
+
+        let completion_config = crate::config::Completion {
+            max_results: 1,
+            show_hidden_files: true,
+            exclude: vec!["*.log".into()],
+            base_path: vec!["${workspaceFolder}".into()],
+        };
+
+        let items = complete("./data/a", &roots, &current_file, &completion_config)
+            .await
+            .unwrap();
+
+        // only "a.txt": "b.log" is excluded and max_results = 1
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].label, "a.txt");
     }
 
+    #[tokio::test]
+    async fn test_filter() {
+        // test filter duplicate and exclude
+        let items = vec![
+            lsp_types::CompletionItem {
+                label: "keep.txt".into(),
+                ..Default::default()
+            },
+            lsp_types::CompletionItem {
+                label: "ignore.log".into(),
+                ..Default::default()
+            },
+            lsp_types::CompletionItem {
+                label: "keep.txt".into(),
+                ..Default::default()
+            }, // duplicate
+        ];
+        let filtered = filter(items, 0, &vec!["*.log".into()]).await;
+        // should drop ".log", dedupe
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].label, "keep.txt");
+
+        // test cap at max results
+        let items = vec![
+            lsp_types::CompletionItem {
+                label: "1.txt".into(),
+                ..Default::default()
+            },
+            lsp_types::CompletionItem {
+                label: "2.log".into(),
+                ..Default::default()
+            },
+            lsp_types::CompletionItem {
+                label: "3.txt".into(),
+                ..Default::default()
+            }, // duplicate
+        ];
+        let filtered = filter(items, 1, &vec![]).await;
+        // should cap at 1
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].label, "1.txt");
+    }
+
+    #[tokio::test]
+    async fn test_expand_tilde() {
+        // test with HOME env
+        let dir = tempfile::tempdir().unwrap();
+        unsafe {
+            env::set_var("HOME", dir.path());
+        }
+
+        let result = expand_tilde("~/projects").unwrap();
+        assert_eq!(result, format!("{}/projects", dir.path().display()));
+        let result = expand_tilde("/path/without/tilde");
+        assert_eq!(result.unwrap(), "/path/without/tilde".to_string());
+
+        // test without HOME env
+        unsafe {
+            env::remove_var("HOME");
+        }
+        let result = expand_tilde("~/projects");
+        assert!(result.is_err());
+    }
+
+    // TODO: test show_hidden_file param
     #[tokio::test]
     async fn test_complete_absolute() {
         // prepare a temporary directory structure
@@ -223,12 +349,15 @@ mod tests {
         std::fs::File::create(base.join("banana.txt")).unwrap();
 
         // complete_absolute with partial "app"
-        let abs_results = complete_absolute(&base.to_path_buf(), "app").await.unwrap();
+        let abs_results = complete_absolute(&base.to_path_buf(), "app", true)
+            .await
+            .unwrap();
         let labels: Vec<String> = abs_results.into_iter().map(|c| c.label).collect();
         assert!(labels.contains(&"apple.txt".to_string()));
         assert!(labels.contains(&"app_dir".to_string()));
     }
 
+    // TODO: test show_hidden_file param
     #[tokio::test]
     async fn test_complete_relative() {
         // prepare workspace root with a subdir
@@ -239,7 +368,7 @@ mod tests {
         std::fs::create_dir(root.join("subdir").join("parcel")).unwrap();
 
         // complete_relative for base_dir "subdir/" and partial "par"
-        let rel_results = complete_relative(&PathBuf::from("subdir/"), "par", root)
+        let rel_results = complete_relative(&PathBuf::from("subdir/"), "par", root, true)
             .await
             .unwrap();
         let mut found_file = false;

@@ -1,6 +1,7 @@
 mod config;
 use crate::config::*;
-use zed_extension_api as zed;
+use zed::settings::LspSettings;
+use zed_extension_api::{self as zed, serde_json};
 
 const EXECUTABLE_DIR: &str = "bin/";
 
@@ -232,6 +233,20 @@ impl zed::Extension for PathServerExtension {
             args: vec![],
             env: Default::default(),
         })
+    }
+
+    fn language_server_workspace_configuration(
+        &mut self,
+        _server_id: &zed::LanguageServerId,
+        worktree: &zed::Worktree,
+    ) -> zed::Result<Option<zed::serde_json::Value>> {
+        let settings = LspSettings::for_worktree("path-server", worktree)
+            .ok()
+            .and_then(|lsp_settings| lsp_settings.settings)
+            .unwrap_or_default();
+        Ok(Some(serde_json::json!({
+            "path-server": settings
+        })))
     }
 }
 

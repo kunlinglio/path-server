@@ -20,18 +20,6 @@ pub enum PathServerError {
     Unknown(String),
 }
 
-impl From<std::string::FromUtf8Error> for PathServerError {
-    fn from(error: std::string::FromUtf8Error) -> Self {
-        PathServerError::EncodingError(error.to_string())
-    }
-}
-
-impl From<std::string::FromUtf16Error> for PathServerError {
-    fn from(error: std::string::FromUtf16Error) -> Self {
-        PathServerError::EncodingError(error.to_string())
-    }
-}
-
 impl From<PathServerError> for tower_lsp::jsonrpc::Error {
     fn from(err: PathServerError) -> Self {
         match err {

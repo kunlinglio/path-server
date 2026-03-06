@@ -27,7 +27,51 @@
   ],
   "main": "./dist/extension.js",
   "contributes": {
-    "commands": []
+    "commands": [
+      {
+        "title": "Path Server: Open configuration",
+        "command": "path-server.openConfiguration"
+      }
+    ],
+    "configuration": [
+      {
+        "title": "Path Server: Completion",
+        "properties": {
+          "path-server.completion.maxResults": {
+            "type": "number",
+            "default": 0,
+            "description": "Max results shown in completion. 0 indicates no limit."
+          },
+          "path-server.completion.showHiddenFiles": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether to show hidden files in completion."
+          },
+          "path-server.completion.exclude": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [
+              "**/node_modules/**",
+              "**/.git/**"
+            ],
+            "description": "List of paths to exclude from completion. Supports glob patterns."
+          },
+          "path-server.completion.basePath": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [
+              "${workspaceFolder}",
+              "${document}"
+            ],
+            "description": "Base paths for relative path completion. Supports `${workspaceFolder}`, `${document}`, `${userHome}` as placeholders."
+          }
+        }
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
@@ -43,7 +87,7 @@
     "lint": "eslint src",
     "test": "vscode-test",
     "build:test-server": "node scripts/build_server.js",
-    "build": "npx rimraf ./dist && npx shx cp ../../README.md ./ && npx vsce package"
+    "build": "npx rimraf ./dist && npx shx cp ../../README.md ./ && npx shx cp ../../LICENSE ./ && npx vsce package"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
