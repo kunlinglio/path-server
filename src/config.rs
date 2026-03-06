@@ -29,6 +29,10 @@ pub struct Completion {
     /// Supports `${workspaceFolder}`, `${document}`, `${userHome}` as placeholders
     #[serde(alias = "basePath")]
     pub base_path: Vec<String>,
+
+    /// Whether to automatically trigger next completion after selecting an item.
+    #[serde(alias = "triggerNextCompletion")]
+    pub trigger_next_completion: bool,
 }
 
 impl Completion {
@@ -75,6 +79,7 @@ impl Default for Config {
                     "**/.DS_Store".into(),
                 ],
                 base_path: vec!["${workspaceFolder}".into(), "${document}".into()],
+                trigger_next_completion: true,
             },
         }
     }
@@ -145,6 +150,7 @@ mod tests {
                 "${document}".into(),
                 "/absolute/path".into(),
             ],
+            trigger_next_completion: true,
         };
 
         let workspace_folders = vec!["/ws1".to_string(), "/ws2".to_string()];
@@ -170,6 +176,7 @@ mod tests {
             show_hidden_files: true,
             exclude: vec![],
             base_path: vec!["${document}".into(), "${userHome}/foo".into()],
+            trigger_next_completion: true,
         };
 
         let workspace_folders = vec![];

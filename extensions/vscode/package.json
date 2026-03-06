@@ -69,6 +69,11 @@
               "${document}"
             ],
             "description": "Base paths for relative path completion. Supports `${workspaceFolder}`, `${document}`, `${userHome}` as placeholders."
+          },
+          "path-server.completion.triggerNextCompletion": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether to automatically trigger next completion after selecting an item."
           }
         }
       }
