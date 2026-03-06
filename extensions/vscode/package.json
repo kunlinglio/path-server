@@ -54,7 +54,8 @@
             },
             "default": [
               "**/node_modules/**",
-              "**/.git/**"
+              "**/.git/**",
+              "**/.DS_Store"
             ],
             "description": "List of paths to exclude from completion. Supports glob patterns."
           },

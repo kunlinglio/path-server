@@ -119,7 +119,6 @@ async fn filter(
     };
 
     let mut seen_labels: HashSet<String> = HashSet::new();
-    let ignore_labels: HashSet<String> = HashSet::from([".DS_Store".to_string()]); // TODO: support config ignores
     let max_completions = if max_completions == 0 {
         usize::MAX
     } else {
@@ -128,10 +127,7 @@ async fn filter(
 
     completions
         .into_iter()
-        .filter(|item| {
-            seen_labels.insert(item.completion.label.clone())
-                && !ignore_labels.contains(&item.completion.label)
-        })
+        .filter(|item| seen_labels.insert(item.completion.label.clone()))
         .filter(|item| !exclude_set.is_match(&item.full_path))
         .take(max_completions)
         .map(|item| item.completion)
