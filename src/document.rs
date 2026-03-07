@@ -3,8 +3,8 @@ use tower_lsp::lsp_types;
 use tree_sitter::Tree;
 
 use crate::common::*;
-use crate::parser::document::update_tree;
-use crate::parser::languages::Language;
+use crate::languages::Language;
+use crate::parser::update_tree;
 
 #[derive(Debug, Clone)]
 pub struct Document {

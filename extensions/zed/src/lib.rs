@@ -227,7 +227,8 @@ impl zed::Extension for PathServerExtension {
         language_server_id: &zed::LanguageServerId,
         _worktree: &zed::Worktree,
     ) -> zed::Result<zed::Command> {
-        let binary_path = Self::get_binary_path(language_server_id)?;
+        // let binary_path = Self::get_binary_path(language_server_id)?;
+        let binary_path = "/Users/lkl/Code/path-server/target/debug/path-server".to_string();
         Ok(zed::Command {
             command: binary_path,
             args: vec![],

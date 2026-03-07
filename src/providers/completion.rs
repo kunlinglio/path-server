@@ -1,13 +1,15 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+use futures::future;
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use tower_lsp::lsp_types;
 
+use crate::async_fs;
 use crate::common::*;
 use crate::config;
 use crate::logger::*;
-use crate::parser::inline;
+use crate::parser;
 use crate::utils;
 
 /// The wrapper struct inside this module to store additional information.
@@ -22,7 +24,7 @@ pub async fn complete(
     current_file: &Path,
     completion_config: &config::Completion,
 ) -> PathServerResult<Vec<lsp_types::CompletionItem>> {
-    let (base_dir, partial_name) = inline::separate_prefix(prefix);
+    let (base_dir, partial_name) = parser::separate_prefix(prefix);
     debug(format!(
         "Detected base_dir: '{}', partial_name: '{}'",
         base_dir, partial_name
@@ -31,17 +33,16 @@ pub async fn complete(
     let base_dir = expand_tilde(&base_dir)?;
     let base_dir = PathBuf::from(base_dir);
 
-    let mut completions: Vec<CompletionItemInner> = vec![];
-    if base_dir.is_absolute() {
+    let completions: Vec<CompletionItemInner> = if base_dir.is_absolute() {
         // absolute path
-        let absolute_completions = complete_absolute(
+        generate_completions(
             &base_dir,
             &partial_name,
+            &Path::new(""),
             completion_config.show_hidden_files,
             completion_config.trigger_next_completion,
         )
-        .await?;
-        completions.extend(absolute_completions);
+        .await?
     } else if base_dir.is_relative() {
         // relative path
         let workspace_folders = workspace_roots
@@ -52,20 +53,22 @@ pub async fn complete(
             .parent()
             .map(|p| p.to_string_lossy().into_owned());
         let home = std::env::var("HOME").ok();
-        let base_paths = completion_config.iter_base_path(&workspace_folders, &parent, &home);
-        let mut rel_completions = vec![];
-        for base_path in base_paths {
-            let completions = complete_relative(
+        let base_paths = completion_config.base_paths(&workspace_folders, &parent, &home);
+
+        future::try_join_all(base_paths.iter().map(async |base_path| {
+            generate_completions(
                 &base_dir,
                 &partial_name,
                 &base_path,
                 completion_config.show_hidden_files,
                 completion_config.trigger_next_completion,
             )
-            .await?;
-            rel_completions.extend(completions);
-        }
-        completions.extend(rel_completions);
+            .await
+        }))
+        .await?
+        .into_iter()
+        .flatten()
+        .collect()
     } else {
         unreachable!()
     };
@@ -136,102 +139,19 @@ async fn filter(
         .collect()
 }
 
-async fn complete_absolute(
-    base_dir: &Path,
-    partial_name: &str,
-    show_hidden_files: bool,
-    trigger_next: bool,
-) -> PathServerResult<Vec<CompletionItemInner>> {
-    let mut completions = vec![];
-    if !base_dir.exists() {
-        debug(format!(
-            "Base directory does not exist: {}",
-            base_dir.display()
-        ))
-        .await;
-        return Ok(vec![]);
-    }
-    if !base_dir.is_dir() {
-        debug(format!(
-            "Base directory is not a directory: {}",
-            base_dir.display()
-        ))
-        .await;
-        return Ok(vec![]);
-    }
-    let files = base_dir.read_dir()?;
-    for file in files {
-        let file = file?;
-        let filename = file.file_name().into_string().map_err(|os_str| {
-            PathServerError::EncodingError(format!(
-                "Failed to convert file name to string: {}",
-                os_str.to_string_lossy()
-            ))
-        })?;
-        if !filename.starts_with(partial_name) {
-            continue;
-        }
-        if !show_hidden_files && utils::is_hidden_file(&file.path())? {
-            continue;
-        }
-        if file.path().is_dir() {
-            let completion = if trigger_next {
-                CompletionItemInner {
-                    completion: lsp_types::CompletionItem {
-                        label: filename.clone(),
-                        kind: Some(lsp_types::CompletionItemKind::FOLDER),
-                        insert_text: Some(filename + "/"),
-                        command: Some(lsp_types::Command {
-                            title: "triggerSuggest".to_string(),
-                            command: "editor.action.triggerSuggest".to_string(),
-                            arguments: None,
-                        }),
-                        ..Default::default()
-                    },
-                    full_path: file.path(),
-                }
-            } else {
-                CompletionItemInner {
-                    completion: lsp_types::CompletionItem {
-                        label: filename.clone(),
-                        kind: Some(lsp_types::CompletionItemKind::FOLDER),
-                        insert_text: Some(filename),
-                        command: None,
-                        ..Default::default()
-                    },
-                    full_path: file.path(),
-                }
-            };
-            completions.push(completion);
-        } else {
-            completions.push(CompletionItemInner {
-                completion: lsp_types::CompletionItem {
-                    label: filename.clone(),
-                    kind: Some(lsp_types::CompletionItemKind::FILE),
-                    insert_text: Some(filename),
-                    ..Default::default()
-                },
-                full_path: file.path(),
-            });
-        }
-    }
-    Ok(completions)
-}
-
-async fn complete_relative(
+async fn generate_completions(
     base_dir: &Path,
     partial_name: &str,
     root: &Path,
     show_hidden_files: bool,
     trigger_next: bool,
 ) -> PathServerResult<Vec<CompletionItemInner>> {
-    let mut completions = vec![];
     let dir = root.join(base_dir);
-    if !dir.exists() {
+    if !async_fs::exists(&dir).await {
         debug(format!("Base directory does not exist: {}", dir.display())).await;
         return Ok(vec![]);
     }
-    if !dir.is_dir() {
+    if !async_fs::is_dir(&dir).await {
         debug(format!(
             "Base directory is not a directory: {}",
             dir.display()
@@ -239,62 +159,64 @@ async fn complete_relative(
         .await;
         return Ok(vec![]);
     }
-    let files = dir.read_dir()?;
-    for file in files {
-        let file = file?;
-        let filename = file.file_name().into_string().map_err(|os_str| {
-            PathServerError::EncodingError(format!(
-                "Failed to convert file name to string: {}",
-                os_str.to_string_lossy()
-            ))
-        })?;
-        if !filename.starts_with(partial_name) {
-            continue;
-        }
-        if !show_hidden_files && utils::is_hidden_file(&file.path())? {
-            continue;
-        }
-        if file.path().is_dir() {
-            let completion = if trigger_next {
-                CompletionItemInner {
+
+    let completions = future::try_join_all(async_fs::read_dir(&dir).await?.into_iter().map(
+        |file| async move {
+            let filename = file.file_name().into_string().map_err(|os_str| {
+                PathServerError::EncodingError(format!(
+                    "Failed to convert file name to string: {}",
+                    os_str.to_string_lossy()
+                ))
+            })?;
+            if !filename.starts_with(partial_name) {
+                return PathServerResult::Ok(None);
+            }
+            if !show_hidden_files && utils::is_hidden_file(&file.path())? {
+                return Ok(None);
+            }
+            if async_fs::is_dir(&file.path()).await {
+                let completion = CompletionItemInner {
                     completion: lsp_types::CompletionItem {
                         label: filename.clone(),
                         kind: Some(lsp_types::CompletionItemKind::FOLDER),
-                        insert_text: Some(filename + "/"),
-                        command: Some(lsp_types::Command {
-                            title: "triggerSuggest".to_string(),
-                            command: "editor.action.triggerSuggest".to_string(),
-                            arguments: None,
-                        }),
+                        insert_text: if trigger_next {
+                            Some(filename + "/")
+                        } else {
+                            Some(filename)
+                        },
+                        command: if trigger_next {
+                            Some(lsp_types::Command {
+                                title: "triggerSuggest".to_string(),
+                                command: "editor.action.triggerSuggest".to_string(),
+                                arguments: None,
+                            })
+                        } else {
+                            None
+                        },
                         ..Default::default()
                     },
                     full_path: file.path(),
-                }
+                };
+                Ok(Some(completion))
             } else {
-                CompletionItemInner {
+                let completion = CompletionItemInner {
                     completion: lsp_types::CompletionItem {
                         label: filename.clone(),
-                        kind: Some(lsp_types::CompletionItemKind::FOLDER),
+                        kind: Some(lsp_types::CompletionItemKind::FILE),
                         insert_text: Some(filename),
-                        command: None,
                         ..Default::default()
                     },
                     full_path: file.path(),
-                }
-            };
-            completions.push(completion);
-        } else {
-            completions.push(CompletionItemInner {
-                completion: lsp_types::CompletionItem {
-                    label: filename.clone(),
-                    kind: Some(lsp_types::CompletionItemKind::FILE),
-                    insert_text: Some(filename),
-                    ..Default::default()
-                },
-                full_path: file.path(),
-            });
-        }
-    }
+                };
+                Ok(Some(completion))
+            }
+        },
+    ))
+    .await?
+    .into_iter()
+    .filter(|x| x.is_some())
+    .map(|x| x.unwrap())
+    .collect();
     Ok(completions)
 }
 
@@ -426,9 +348,10 @@ mod tests {
         std::fs::File::create(base.join("banana.txt")).unwrap();
 
         // complete_absolute with partial "app"
-        let abs_results = complete_absolute(&base.to_path_buf(), "app", true, true)
-            .await
-            .unwrap();
+        let abs_results =
+            generate_completions(&base.to_path_buf(), "app", Path::new(""), true, true)
+                .await
+                .unwrap();
         let labels: Vec<String> = abs_results
             .into_iter()
             .map(|c| c.completion.label)
@@ -468,9 +391,15 @@ mod tests {
         assert!(hf::is_hidden(base.join("a_dir").join(&hidden_filepath)).unwrap());
 
         // complete without showing hidden files
-        let abs_results = complete_absolute(&base.to_path_buf().join("a_dir"), "", false, true)
-            .await
-            .unwrap();
+        let abs_results = generate_completions(
+            &base.to_path_buf().join("a_dir"),
+            "",
+            Path::new(""),
+            false,
+            true,
+        )
+        .await
+        .unwrap();
         let labels: Vec<String> = abs_results
             .into_iter()
             .map(|c| c.completion.label)
@@ -479,9 +408,15 @@ mod tests {
         assert!(!labels.contains(&hidden_filepath));
 
         // complete with showing hidden files
-        let abs_results = complete_absolute(&base.to_path_buf().join("a_dir"), "", true, true)
-            .await
-            .unwrap();
+        let abs_results = generate_completions(
+            &base.to_path_buf().join("a_dir"),
+            "",
+            Path::new(""),
+            true,
+            true,
+        )
+        .await
+        .unwrap();
         let labels: Vec<String> = abs_results
             .into_iter()
             .map(|c| c.completion.label)
@@ -500,7 +435,7 @@ mod tests {
         std::fs::create_dir(root.join("subdir").join("parcel")).unwrap();
 
         // complete_relative for base_dir "subdir/" and partial "par"
-        let rel_results = complete_relative(&PathBuf::from("subdir/"), "par", root, true, true)
+        let rel_results = generate_completions(&PathBuf::from("subdir/"), "par", root, true, true)
             .await
             .unwrap();
         let mut found_file = false;
@@ -549,7 +484,7 @@ mod tests {
         assert!(hf::is_hidden(base.join("a_dir").join(&hidden_filepath)).unwrap());
 
         // complete without showing hidden files
-        let abs_results = complete_relative(&PathBuf::from("./a_dir"), "", base, false, true)
+        let abs_results = generate_completions(&PathBuf::from("./a_dir"), "", base, false, true)
             .await
             .unwrap();
         let labels: Vec<String> = abs_results
@@ -560,7 +495,7 @@ mod tests {
         assert!(!labels.contains(&hidden_filepath));
 
         // complete with showing hidden files
-        let abs_results = complete_relative(&PathBuf::from("./a_dir"), "", base, true, true)
+        let abs_results = generate_completions(&PathBuf::from("./a_dir"), "", base, true, true)
             .await
             .unwrap();
         let labels: Vec<String> = abs_results

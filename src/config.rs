@@ -36,7 +36,7 @@ pub struct Completion {
 }
 
 impl Completion {
-    pub fn iter_base_path(
+    pub fn base_paths(
         &self,
         workspace_folders: &[String],
         document_parent: &Option<String>,
@@ -140,7 +140,7 @@ mod tests {
     }
 
     #[test]
-    fn test_iter_base_path_expands_workspace_and_document() {
+    fn test_base_paths_expands_workspace_and_document() {
         let completion = Completion {
             max_results: 0,
             show_hidden_files: true,
@@ -157,7 +157,7 @@ mod tests {
         let document_parent = Some("/ws1/project".to_string());
         let user_home = None;
 
-        let result = completion.iter_base_path(&workspace_folders, &document_parent, &user_home);
+        let result = completion.base_paths(&workspace_folders, &document_parent, &user_home);
 
         let expected: Vec<PathBuf> = vec![
             "/ws1/src".into(),
@@ -170,7 +170,7 @@ mod tests {
     }
 
     #[test]
-    fn test_iter_base_path_skips_missing_document_or_user_home() {
+    fn test_base_paths_skips_missing_document_or_user_home() {
         let completion = Completion {
             max_results: 0,
             show_hidden_files: true,
@@ -183,7 +183,7 @@ mod tests {
         let document_parent = None;
         let user_home = Some("/home/user".to_string());
 
-        let result = completion.iter_base_path(&workspace_folders, &document_parent, &user_home);
+        let result = completion.base_paths(&workspace_folders, &document_parent, &user_home);
 
         let expected: Vec<PathBuf> = vec!["/home/user/foo".into()];
 

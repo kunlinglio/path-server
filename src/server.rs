@@ -1,5 +1,4 @@
 use std::collections::{HashMap, HashSet};
-use std::fmt::format;
 use std::path::PathBuf;
 
 use tokio::sync::RwLock;
@@ -7,12 +6,11 @@ use tower_lsp::jsonrpc;
 use tower_lsp::lsp_types;
 
 use crate::common::*;
-use crate::completion;
 use crate::config;
 use crate::document::Document;
 use crate::logger::{self, *};
-use crate::parser::languages::Language;
-use crate::parser::{document, inline};
+use crate::parser;
+use crate::providers;
 use crate::utils::url_to_path;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -248,7 +246,7 @@ impl tower_lsp::LanguageServer for PathServer {
         let line_prefix = doc.get_line(line_number, Some(character))?;
 
         // parse the line
-        let raw_path = inline::parse_line(&line_prefix);
+        let raw_path = parser::parse_line(&line_prefix);
         debug(format!("Completing for prefix: '{}'", raw_path)).await;
 
         // completion
@@ -262,9 +260,13 @@ impl tower_lsp::LanguageServer for PathServer {
             return Ok(None);
         };
         let workspace_roots = self.workspace_roots.read().await;
-        let completions =
-            completion::complete(&raw_path, &workspace_roots, &file_path, &completion_config)
-                .await?;
+        let completions = providers::completion::complete(
+            &raw_path,
+            &workspace_roots,
+            &file_path,
+            &completion_config,
+        )
+        .await?;
 
         return Ok(Some(lsp_types::CompletionResponse::Array(completions)));
     }
@@ -287,24 +289,7 @@ impl tower_lsp::LanguageServer for PathServer {
             return Ok(None);
         };
 
-        let strings = document::extract_string(doc);
-        let mut links = vec![];
-
-        for s in strings {
-            let start = doc.utf_16_pos(s.start_byte)?;
-            let end = doc.utf_16_pos(s.end_byte)?;
-            let range = lsp_types::Range::new(
-                lsp_types::Position::new(start.0 as u32, start.1 as u32),
-                lsp_types::Position::new(end.0 as u32, end.1 as u32),
-            );
-
-            links.push(lsp_types::DocumentLink {
-                range,
-                target: Some(params.text_document.uri.clone()), // TODO: jump to actual url
-                tooltip: Some("Follow path".into()),
-                data: None,
-            });
-        }
+        let links = providers::link::provide_document_links(doc)?;
         debug(format!("Generated document links: {}", links.len())).await;
         Ok(Some(links))
     }
@@ -339,28 +324,7 @@ impl tower_lsp::LanguageServer for PathServer {
             return Ok(None);
         };
 
-        // find if the cursor is within a string
-        let strings = document::extract_string(doc);
-        let current_str = strings.into_iter().find(|s| {
-            let start = doc.utf_16_pos(s.start_byte).unwrap_or((0, 0));
-            let end = doc.utf_16_pos(s.end_byte).unwrap_or((0, 0));
-            line == start.0 && character >= start.1 && character <= end.1
-        });
-
-        let Some(_) = current_str else {
-            return Ok(None);
-        };
-
-        // TODO: jump to actual url
-        let target_uri = params
-            .text_document_position_params
-            .text_document
-            .uri
-            .clone();
-        let range = lsp_types::Range::default();
-
-        Ok(Some(lsp_types::GotoDefinitionResponse::Scalar(
-            lsp_types::Location::new(target_uri, range),
-        )))
+        let definition = providers::definition::provide_definition(doc, line, character)?;
+        Ok(definition)
     }
 }
