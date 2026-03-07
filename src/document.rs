@@ -1,4 +1,4 @@
-use line_index::{LineIndex, WideEncoding, WideLineCol};
+use line_index::{LineIndex, TextSize, WideEncoding, WideLineCol};
 use tower_lsp::lsp_types;
 use tree_sitter::Tree;
 
@@ -19,13 +19,15 @@ pub struct Document {
 }
 
 impl Document {
-    pub fn new(text: String, language_id: &str) -> Self {
-        Self {
+    pub fn new(text: String, language_id: &str) -> PathServerResult<Self> {
+        let mut doc = Self {
             text: text.clone(),
             index: LineIndex::new(&text),
             language: Language::from_id(language_id),
             tree: None,
-        }
+        };
+        doc.tree = update_tree(&doc)?;
+        Ok(doc)
     }
 
     pub fn apply_change(
@@ -69,20 +71,28 @@ impl Document {
 
         Ok(self.text[line_start..line_end].to_string())
     }
+
+    pub fn utf_16_pos(&self, offset: usize) -> PathServerResult<(usize, usize)> {
+        offset_to_position(&self.index, offset)
+    }
 }
 
+/// Convert UTF-16 line/column to byte offset
+/// - "column" in (line, column) is the the "utf-16 code unit" offset, in which a emoji/Chinese character may span 2 units.
+/// - (line, column) in UTF-8 is the all "byte offset" based
 fn position_to_offset(index: &LineIndex, line: usize, character: usize) -> PathServerResult<usize> {
     let wide_line_col = WideLineCol {
         line: line as u32,
         col: character as u32,
     };
-    let encoding = WideEncoding::Utf16;
-    let Some(line_col) = index.to_utf8(encoding, wide_line_col) else {
+    // convert from "code unit based" to "byte based"
+    let Some(line_col) = index.to_utf8(WideEncoding::Utf16, wide_line_col) else {
         return Err(PathServerError::EncodingError(format!(
             "Failed to convert wide line/column to UTF-8 for line {}, column {}",
             line, character
         )));
     };
+    // calculate offset: offset = starts[line] + col
     let Some(char_offset) = index.offset(line_col) else {
         return Err(PathServerError::EncodingError(format!(
             "Failed to calculate character offset for line {}, column {}",
@@ -90,6 +100,17 @@ fn position_to_offset(index: &LineIndex, line: usize, character: usize) -> PathS
         )));
     };
     Ok(char_offset.into())
+}
+
+fn offset_to_position(index: &LineIndex, offset: usize) -> PathServerResult<(usize, usize)> {
+    let line_col = index.line_col(TextSize::new(offset as u32));
+    let Some(wide_offset) = index.to_wide(WideEncoding::Utf16, line_col) else {
+        return Err(PathServerError::EncodingError(format!(
+            "Failed to convert offset to wide position for offset {}",
+            offset
+        )));
+    };
+    Ok((wide_offset.line as usize, wide_offset.col as usize))
 }
 
 #[cfg(test)]
@@ -157,7 +178,7 @@ World"#;
             "第二行-包含中文 and ASCII characters\n",
             "第三行结束\n",
         ];
-        let doc = Document::new(text.concat(), &Language::PlainText.to_string());
+        let doc = Document::new(text.concat(), &Language::plain_text.to_string()).unwrap();
 
         // get full lines
         assert_eq!(doc.get_line(0, None).unwrap(), text[0]);
@@ -175,7 +196,7 @@ World"#;
     #[test]
     fn test_apply_change_range() {
         let text = ["First line\n", "Second line: 包含中文\n", "Third line\n"];
-        let mut doc = Document::new(text.concat(), &Language::PlainText.to_string());
+        let mut doc = Document::new(text.concat(), &Language::plain_text.to_string()).unwrap();
         assert_eq!(doc.text, text.concat());
 
         // replace second line by range (line 1 start -> line 2 start)
@@ -203,7 +224,7 @@ World"#;
     #[test]
     fn test_apply_change_full() {
         let text = ["First line\n", "Second line: 包含中文\n", "Third line\n"];
-        let mut doc = Document::new(text.concat(), &Language::PlainText.to_string());
+        let mut doc = Document::new(text.concat(), &Language::plain_text.to_string()).unwrap();
         assert_eq!(doc.text, text.concat());
         // full document replace when range is None
         let full = lsp_types::TextDocumentContentChangeEvent {

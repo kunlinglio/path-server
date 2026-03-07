@@ -5,5 +5,6 @@ use crate::document::Document;
 
 pub fn extract_string(_document: &Document) -> Option<Vec<StringLiteral>> {
     // TODO: Implement it
+    assert!(false, "Not implemented");
     Some(vec![])
 }

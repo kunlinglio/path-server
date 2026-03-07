@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
+use std::fmt::format;
 use std::path::PathBuf;
 
-use tokio::sync::Mutex;
 use tokio::sync::RwLock;
 use tower_lsp::jsonrpc;
 use tower_lsp::lsp_types;
@@ -11,8 +11,8 @@ use crate::completion;
 use crate::config;
 use crate::document::Document;
 use crate::logger::{self, *};
-use crate::parser::inline;
 use crate::parser::languages::Language;
+use crate::parser::{document, inline};
 use crate::utils::url_to_path;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -22,7 +22,7 @@ pub struct PathServer {
     client: tower_lsp::Client,
     workspace_roots: RwLock<HashSet<PathBuf>>,
     /// file path -> document
-    documents: Mutex<HashMap<PathBuf, Document>>,
+    documents: RwLock<HashMap<PathBuf, Document>>,
     /// To override configuration from lsp client
     config_override: RwLock<Option<config::Config>>,
 }
@@ -33,7 +33,7 @@ impl PathServer {
         Self {
             client,
             workspace_roots: RwLock::new(HashSet::new()),
-            documents: Mutex::new(HashMap::new()),
+            documents: RwLock::new(HashMap::new()),
             config_override: RwLock::new(None),
         }
     }
@@ -83,6 +83,7 @@ impl tower_lsp::LanguageServer for PathServer {
         }
         Ok(lsp_types::InitializeResult {
             capabilities: lsp_types::ServerCapabilities {
+                // for path completion
                 completion_provider: Some(lsp_types::CompletionOptions {
                     trigger_characters: Some(vec![
                         ".".to_string(),
@@ -93,6 +94,14 @@ impl tower_lsp::LanguageServer for PathServer {
                     resolve_provider: Some(false),
                     ..Default::default()
                 }),
+                // for path highlighting
+                document_link_provider: Some(lsp_types::DocumentLinkOptions {
+                    resolve_provider: Some(false),
+                    work_done_progress_options: Default::default(),
+                }),
+                // for path jumping
+                definition_provider: Some(lsp_types::OneOf::Left(true)),
+                // detecters
                 text_document_sync: Some(lsp_types::TextDocumentSyncCapability::Kind(
                     lsp_types::TextDocumentSyncKind::INCREMENTAL,
                 )),
@@ -112,6 +121,10 @@ impl tower_lsp::LanguageServer for PathServer {
     async fn initialized(&self, _: lsp_types::InitializedParams) {
         log("Path Server initialized".to_string()).await;
         log(format!("Path Server version: {}", VERSION)).await;
+    }
+
+    async fn shutdown(&self) -> jsonrpc::Result<()> {
+        Ok(())
     }
 
     async fn did_change_configuration(&self, _: lsp_types::DidChangeConfigurationParams) {
@@ -146,7 +159,12 @@ impl tower_lsp::LanguageServer for PathServer {
     }
 
     async fn did_open(&self, params: lsp_types::DidOpenTextDocumentParams) {
-        let mut documents = self.documents.lock().await;
+        debug(format!(
+            "Opening document: {}, language: {}",
+            params.text_document.uri, params.text_document.language_id
+        ))
+        .await;
+        let mut documents = self.documents.write().await;
         let Ok(path) = url_to_path(&params.text_document.uri) else {
             warn(format!(
                 "Failed to convert URI to file path: {}",
@@ -157,18 +175,24 @@ impl tower_lsp::LanguageServer for PathServer {
         };
         documents.insert(
             path,
-            Document::new(params.text_document.text, &params.text_document.language_id),
+            Document::new(params.text_document.text, &params.text_document.language_id).unwrap(),
         );
     }
 
     async fn did_change(&self, params: lsp_types::DidChangeTextDocumentParams) {
+        debug(format!("Changing document: {}", params.text_document.uri)).await;
         let Ok(path) = url_to_path(&params.text_document.uri) else {
+            warn(format!(
+                "Failed to convert URI to file path: {}",
+                params.text_document.uri
+            ))
+            .await;
             return;
         };
-        let mut docs = self.documents.lock().await;
+        let mut docs = self.documents.write().await;
         let doc = docs
             .entry(path)
-            .or_insert_with(|| Document::new(String::new(), &Language::Unknown.to_string()));
+            .or_insert_with(|| Document::new(String::new(), "").unwrap());
         // apply each change in order
         for change in params.content_changes.into_iter() {
             let result = doc.apply_change(&change);
@@ -181,15 +205,20 @@ impl tower_lsp::LanguageServer for PathServer {
                 params.text_document.uri
             ))
             .await;
-            debug(format!("Document text: {}", doc.text)).await;
         }
     }
 
     async fn did_close(&self, params: lsp_types::DidCloseTextDocumentParams) {
+        debug(format!("Closing document: {}", params.text_document.uri)).await;
         let Ok(path) = url_to_path(&params.text_document.uri) else {
+            warn(format!(
+                "Failed to convert URI to file path: {}",
+                params.text_document.uri
+            ))
+            .await;
             return;
         };
-        self.documents.lock().await.remove(&path);
+        self.documents.write().await.remove(&path);
     }
 
     async fn completion(
@@ -207,7 +236,7 @@ impl tower_lsp::LanguageServer for PathServer {
             .await;
             return Ok(None);
         };
-        let documents = self.documents.lock().await;
+        let documents = self.documents.read().await;
         let Some(doc) = documents.get(&path) else {
             warn(format!("Document not found: {}", path.display())).await;
             return Err(PathServerError::Unknown(format!(
@@ -240,7 +269,98 @@ impl tower_lsp::LanguageServer for PathServer {
         return Ok(Some(lsp_types::CompletionResponse::Array(completions)));
     }
 
-    async fn shutdown(&self) -> jsonrpc::Result<()> {
-        Ok(())
+    async fn document_link(
+        &self,
+        params: lsp_types::DocumentLinkParams,
+    ) -> jsonrpc::Result<Option<Vec<lsp_types::DocumentLink>>> {
+        let Ok(path) = url_to_path(&params.text_document.uri) else {
+            warn(format!(
+                "Failed to convert URI to file path: {}",
+                params.text_document.uri
+            ))
+            .await;
+            return Ok(None);
+        };
+        let documents = self.documents.read().await;
+        let Some(doc) = documents.get(&path) else {
+            warn(format!("Document not found: {}", path.display())).await;
+            return Ok(None);
+        };
+
+        let strings = document::extract_string(doc);
+        let mut links = vec![];
+
+        for s in strings {
+            let start = doc.utf_16_pos(s.start_byte)?;
+            let end = doc.utf_16_pos(s.end_byte)?;
+            let range = lsp_types::Range::new(
+                lsp_types::Position::new(start.0 as u32, start.1 as u32),
+                lsp_types::Position::new(end.0 as u32, end.1 as u32),
+            );
+
+            links.push(lsp_types::DocumentLink {
+                range,
+                target: Some(params.text_document.uri.clone()), // TODO: jump to actual url
+                tooltip: Some("Follow path".into()),
+                data: None,
+            });
+        }
+        debug(format!("Generated document links: {}", links.len())).await;
+        Ok(Some(links))
+    }
+
+    async fn goto_definition(
+        &self,
+        params: lsp_types::GotoDefinitionParams,
+    ) -> jsonrpc::Result<Option<lsp_types::GotoDefinitionResponse>> {
+        debug(format!(
+            "Processing goto definition request for: {}",
+            params.text_document_position_params.text_document.uri
+        ))
+        .await;
+        let line = params.text_document_position_params.position.line as usize;
+        let character = params.text_document_position_params.position.character as usize;
+        let Ok(path) = url_to_path(&params.text_document_position_params.text_document.uri) else {
+            warn(format!(
+                "Failed to convert URI to file path: {}",
+                params.text_document_position_params.text_document.uri
+            ))
+            .await;
+            return Ok(None);
+        };
+
+        let documents = self.documents.read().await;
+        let Some(doc) = documents.get(&path) else {
+            warn(format!(
+                "Document not found: {}",
+                params.text_document_position_params.text_document.uri
+            ))
+            .await;
+            return Ok(None);
+        };
+
+        // find if the cursor is within a string
+        let strings = document::extract_string(doc);
+        let current_str = strings.into_iter().find(|s| {
+            let start = doc.utf_16_pos(s.start_byte).unwrap_or((0, 0));
+            let end = doc.utf_16_pos(s.end_byte).unwrap_or((0, 0));
+            line == start.0 && character >= start.1 && character <= end.1
+        });
+
+        let Some(_) = current_str else {
+            return Ok(None);
+        };
+
+        // TODO: jump to actual url
+        let target_uri = params
+            .text_document_position_params
+            .text_document
+            .uri
+            .clone();
+        let range = lsp_types::Range::default();
+
+        Ok(Some(lsp_types::GotoDefinitionResponse::Scalar(
+            lsp_types::Location::new(target_uri, range),
+        )))
     }
 }
