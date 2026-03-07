@@ -1,19 +1,30 @@
 use line_index::{LineIndex, WideEncoding, WideLineCol};
 use tower_lsp::lsp_types;
+use tree_sitter::Tree;
 
 use crate::common::*;
+use crate::parser::document::update_tree;
+use crate::parser::languages::Language;
 
 #[derive(Debug, Clone)]
 pub struct Document {
+    /// Raw text
     pub text: String,
+    /// Index for line/column -> offset calculations
     index: LineIndex,
+    /// Language if from lsp client
+    pub language: Language,
+    /// Tree-sitter AST tree for incremental parsing
+    pub tree: Option<Tree>,
 }
 
 impl Document {
-    pub fn new(text: String) -> Self {
+    pub fn new(text: String, language_id: &str) -> Self {
         Self {
             text: text.clone(),
             index: LineIndex::new(&text),
+            language: Language::from_id(language_id),
+            tree: None,
         }
     }
 
@@ -23,6 +34,7 @@ impl Document {
     ) -> PathServerResult<()> {
         if change.range.is_none() {
             self.text = change.text.clone();
+            self.tree = update_tree(&self)?;
             return Ok(());
         }
         let range = change.range.as_ref().unwrap();
@@ -39,6 +51,7 @@ impl Document {
 
         self.text.replace_range(start..end, &change.text);
         self.index = LineIndex::new(&self.text);
+        self.tree = update_tree(&self)?;
         Ok(())
     }
 
@@ -144,7 +157,7 @@ World"#;
             "第二行-包含中文 and ASCII characters\n",
             "第三行结束\n",
         ];
-        let doc = Document::new(text.concat());
+        let doc = Document::new(text.concat(), &Language::PlainText.to_string());
 
         // get full lines
         assert_eq!(doc.get_line(0, None).unwrap(), text[0]);
@@ -162,7 +175,7 @@ World"#;
     #[test]
     fn test_apply_change_range() {
         let text = ["First line\n", "Second line: 包含中文\n", "Third line\n"];
-        let mut doc = Document::new(text.concat());
+        let mut doc = Document::new(text.concat(), &Language::PlainText.to_string());
         assert_eq!(doc.text, text.concat());
 
         // replace second line by range (line 1 start -> line 2 start)
@@ -190,7 +203,7 @@ World"#;
     #[test]
     fn test_apply_change_full() {
         let text = ["First line\n", "Second line: 包含中文\n", "Third line\n"];
-        let mut doc = Document::new(text.concat());
+        let mut doc = Document::new(text.concat(), &Language::PlainText.to_string());
         assert_eq!(doc.text, text.concat());
         // full document replace when range is None
         let full = lsp_types::TextDocumentContentChangeEvent {

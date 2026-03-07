@@ -45,7 +45,6 @@ You can use it by installing specified extension for your editor.
       }
     }
   }
-  // ...other configs...
 }
 ```
 

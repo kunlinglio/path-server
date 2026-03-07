@@ -4,7 +4,7 @@ All notable changes to the Path Server will be documented in this file.
 
 ## [Unreleased]
 ### Added
-- **Core**: Support automatically trigger next completion after selecting a completion.
+- **Core**: Support automatically triggering next completion after selecting a completion.
 - **Core**: Add config entry: `path-server.completion.triggerNextCompletion`.
 - **VS Code**: Add command `Path Server: Restart Server` to restart the Path Server.
 

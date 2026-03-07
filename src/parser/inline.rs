@@ -1,3 +1,5 @@
+//! Parsers for inline path parsing.
+
 use regex::Regex;
 
 /// Parses a line of text and extracts the path from it.

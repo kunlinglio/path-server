@@ -11,7 +11,8 @@ use crate::completion;
 use crate::config;
 use crate::document::Document;
 use crate::logger::{self, *};
-use crate::parser;
+use crate::parser::inline;
+use crate::parser::languages::Language;
 use crate::utils::url_to_path;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -154,7 +155,10 @@ impl tower_lsp::LanguageServer for PathServer {
             .await;
             return;
         };
-        documents.insert(path, Document::new(params.text_document.text));
+        documents.insert(
+            path,
+            Document::new(params.text_document.text, &params.text_document.language_id),
+        );
     }
 
     async fn did_change(&self, params: lsp_types::DidChangeTextDocumentParams) {
@@ -164,7 +168,7 @@ impl tower_lsp::LanguageServer for PathServer {
         let mut docs = self.documents.lock().await;
         let doc = docs
             .entry(path)
-            .or_insert_with(|| Document::new(String::new()));
+            .or_insert_with(|| Document::new(String::new(), &Language::Unknown.to_string()));
         // apply each change in order
         for change in params.content_changes.into_iter() {
             let result = doc.apply_change(&change);
@@ -215,7 +219,7 @@ impl tower_lsp::LanguageServer for PathServer {
         let line_prefix = doc.get_line(line_number, Some(character))?;
 
         // parse the line
-        let raw_path = parser::parse_line(&line_prefix);
+        let raw_path = inline::parse_line(&line_prefix);
         debug(format!("Completing for prefix: '{}'", raw_path)).await;
 
         // completion

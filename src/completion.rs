@@ -7,7 +7,7 @@ use tower_lsp::lsp_types;
 use crate::common::*;
 use crate::config;
 use crate::logger::*;
-use crate::parser;
+use crate::parser::inline;
 use crate::utils;
 
 /// The wrapper struct inside this module to store additional information.
@@ -22,7 +22,7 @@ pub async fn complete(
     current_file: &Path,
     completion_config: &config::Completion,
 ) -> PathServerResult<Vec<lsp_types::CompletionItem>> {
-    let (base_dir, partial_name) = parser::separate_prefix(prefix);
+    let (base_dir, partial_name) = inline::separate_prefix(prefix);
     debug(format!(
         "Detected base_dir: '{}', partial_name: '{}'",
         base_dir, partial_name
