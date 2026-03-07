@@ -31,6 +31,10 @@
       {
         "title": "Path Server: Open configuration",
         "command": "path-server.openConfiguration"
+      },
+      {
+        "title": "Path Server: Restart Server",
+        "command": "path-server.restartServer"
       }
     ],
     "configuration": [
@@ -53,8 +57,8 @@
               "type": "string"
             },
             "default": [
-              "**/node_modules/**",
-              "**/.git/**",
+              "**/node_modules",
+              "**/.git",
               "**/.DS_Store"
             ],
             "description": "List of paths to exclude from completion. Supports glob patterns."
@@ -69,6 +73,11 @@
               "${document}"
             ],
             "description": "Base paths for relative path completion. Supports `${workspaceFolder}`, `${document}`, `${userHome}` as placeholders."
+          },
+          "path-server.completion.triggerNextCompletion": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether to automatically trigger next completion after selecting an item."
           }
         }
       }

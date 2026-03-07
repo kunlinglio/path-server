@@ -9,6 +9,9 @@
 				"npm: watch:tsc",
 				"npm: watch:esbuild"
 			],
+			"runOptions": {
+				"runOn": "folderOpen"
+			},
 			"presentation": {
 				"reveal": "never"
 			},

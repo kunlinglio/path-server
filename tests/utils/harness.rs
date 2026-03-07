@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
+use path_server::Config;
 use path_server::PathServer;
-use path_server::config::Config;
 use std::fs::{self, File};
 use std::path::PathBuf;
 use tower_lsp::lsp_types::*;

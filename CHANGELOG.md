@@ -2,6 +2,12 @@
 
 All notable changes to the Path Server will be documented in this file.
 
+## [Unreleased]
+### Added
+- **Core**: Support automatically trigger next completion after selecting a completion.
+- **Core**: Add config entry: `path-server.completion.triggerNextCompletion`.
+- **VS Code**: Add command `Path Server: Restart Server` to restart the Path Server.
+
 ## [0.3.0] 2026-03-06
 ### Fixed
 - **Zed**: Fix version-compatibility check — correctly parse the major version so `v10.x.x` is not mistaken for `v1.x.x`.
@@ -16,7 +22,7 @@ All notable changes to the Path Server will be documented in this file.
 - **Zed**: Support read custom configuration from `settings.json` > `lsp.path-server.settings`.
 - **VS Code**: Support reading custom configuration from settings panel `path-server`.
 - **VS Code**: Add command `Path Server: Open Configuration` to open Path Server configuration.
-- Add detailed description of configuration usage and configuration options into the README.
+- Add detailed description of configuration usage and configuration options.
 
 ## [0.2.0] - 2026-03-04
 ### Added

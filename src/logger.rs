@@ -28,7 +28,7 @@ pub async fn debug(message: String) {
 
 pub async fn log(message: String) {
     if cfg!(test) {
-        println!("[LOG] {}", message);
+        eprintln!("[LOG] {}", message);
         return;
     }
     if let Some(client) = LSP_CLIENT.get() {
@@ -40,14 +40,14 @@ pub async fn log(message: String) {
     }
 }
 
-pub async fn info(message: String) {
+pub async fn warn(message: String) {
     if cfg!(test) {
-        println!("[INFO] {}", message);
+        eprintln!("[WARN] {}", message);
         return;
     }
     if let Some(client) = LSP_CLIENT.get() {
         client
-            .log_message(lsp_types::MessageType::INFO, format!("[INFO] {}", message))
+            .log_message(lsp_types::MessageType::INFO, format!("[WARN] {}", message))
             .await;
     } else {
         panic!("Failed to log: lopper is not initialized!")
@@ -56,7 +56,7 @@ pub async fn info(message: String) {
 
 pub async fn error(message: String) {
     if cfg!(test) {
-        println!("[ERROR] {}", message);
+        eprintln!("[ERROR] {}", message);
         return;
     }
     if let Some(client) = LSP_CLIENT.get() {

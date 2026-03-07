@@ -20,7 +20,7 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub struct PathServer {
     client: tower_lsp::Client,
     workspace_roots: RwLock<HashSet<PathBuf>>,
-    /// url -> document
+    /// file path -> document
     documents: Mutex<HashMap<PathBuf, Document>>,
     /// To override configuration from lsp client
     config_override: RwLock<Option<config::Config>>,
@@ -59,7 +59,7 @@ impl tower_lsp::LanguageServer for PathServer {
         // for backward compatibility
         if let Some(uri) = params.root_uri {
             let Ok(root) = url_to_path(&uri) else {
-                info(format!("Failed to convert root URI to file path: {}", uri)).await;
+                warn(format!("Failed to convert root URI to file path: {}", uri)).await;
                 return Err(jsonrpc::Error::invalid_params("Invalid root URI"));
             };
             let mut roots = self.workspace_roots.write().await;
@@ -70,7 +70,7 @@ impl tower_lsp::LanguageServer for PathServer {
             for folder in folders {
                 log(format!("Adding workspace root: {}", folder.uri)).await;
                 let Ok(root) = url_to_path(&folder.uri) else {
-                    info(format!(
+                    warn(format!(
                         "Failed to convert URI to file path: {}",
                         folder.uri
                     ))
@@ -125,7 +125,7 @@ impl tower_lsp::LanguageServer for PathServer {
             log(format!("Adding workspace folder: {}", folder.uri)).await;
             let mut roots = self.workspace_roots.write().await;
             let Ok(root) = url_to_path(&folder.uri) else {
-                info(format!(
+                warn(format!(
                     "Failed to convert URI to file path: {}",
                     folder.uri
                 ))
@@ -147,7 +147,7 @@ impl tower_lsp::LanguageServer for PathServer {
     async fn did_open(&self, params: lsp_types::DidOpenTextDocumentParams) {
         let mut documents = self.documents.lock().await;
         let Ok(path) = url_to_path(&params.text_document.uri) else {
-            info(format!(
+            warn(format!(
                 "Failed to convert URI to file path: {}",
                 params.text_document.uri
             ))
@@ -172,7 +172,7 @@ impl tower_lsp::LanguageServer for PathServer {
                 error(format!("Failed to apply change: {}", e)).await;
                 continue;
             }
-            log(format!(
+            debug(format!(
                 "Applied change to document: {}",
                 params.text_document.uri
             ))
@@ -196,7 +196,7 @@ impl tower_lsp::LanguageServer for PathServer {
         let line_number = params.text_document_position.position.line as usize;
         let character = params.text_document_position.position.character as usize;
         let Ok(path) = url_to_path(&params.text_document_position.text_document.uri) else {
-            info(format!(
+            warn(format!(
                 "Failed to convert URI to file path: {}",
                 params.text_document_position.text_document.uri
             ))
@@ -205,7 +205,7 @@ impl tower_lsp::LanguageServer for PathServer {
         };
         let documents = self.documents.lock().await;
         let Some(doc) = documents.get(&path) else {
-            info(format!("Document not found: {}", path.display())).await;
+            warn(format!("Document not found: {}", path.display())).await;
             return Err(PathServerError::Unknown(format!(
                 "Document not found: {}",
                 path.display()
@@ -221,7 +221,7 @@ impl tower_lsp::LanguageServer for PathServer {
         // completion
         let completion_config = self.get_config().await.completion;
         let Ok(file_path) = url_to_path(&params.text_document_position.text_document.uri) else {
-            info(format!(
+            warn(format!(
                 "Failed to convert URI to file path: {}",
                 params.text_document_position.text_document.uri
             ))

@@ -1,6 +1,7 @@
 mod common;
 mod completion;
-pub mod config;
+mod config;
+pub use config::{Completion, Config};
 mod document;
 mod logger;
 mod parser;

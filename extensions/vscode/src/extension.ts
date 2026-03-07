@@ -4,6 +4,8 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import * as languageClient from 'vscode-languageclient/node';
 
+import * as commands from './commands';
+
 let client: languageClient.LanguageClient | undefined;
 
 function binaryPath(context: vscode.ExtensionContext): string {
@@ -11,11 +13,6 @@ function binaryPath(context: vscode.ExtensionContext): string {
     const binaryPath = context.asAbsolutePath(path.join('bin', `path-server${ext}`));
 
     return binaryPath;
-}
-
-async function openConfiguration(context: vscode.ExtensionContext) {
-    const extId = context.extension.id;
-    await vscode.commands.executeCommand('workbench.action.openSettings', `@ext:${extId}`);
 }
 
 export async function activate(context: vscode.ExtensionContext) {
@@ -56,8 +53,10 @@ export async function activate(context: vscode.ExtensionContext) {
     );
     disposables.push(client);
 
-    const openConfig = vscode.commands.registerCommand("path-server.openConfiguration", async () => await openConfiguration(context));
+    const openConfig = vscode.commands.registerCommand("path-server.openConfiguration", async () => await commands.openConfiguration(context));
+    const restartServer = vscode.commands.registerCommand("path-server.restartServer", async () => await commands.restartServer(client as languageClient.LanguageClient));
     disposables.push(openConfig);
+    disposables.push(restartServer);
 
     await client.start();
     context.subscriptions.push(vscode.Disposable.from(...disposables));
