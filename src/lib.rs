@@ -1,10 +1,10 @@
-mod common;
-mod completion;
 mod config;
-pub use config::{Completion, Config};
 mod document;
+mod error;
+mod fs;
 mod logger;
 mod parser;
+mod providers;
 mod server;
-mod utils;
 pub use crate::server::PathServer;
+pub use config::{Completion, Config};

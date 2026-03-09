@@ -15,6 +15,9 @@ pub enum PathServerError {
     // code 1002
     #[error("Unsupported: {0}")]
     Unsupported(String),
+    // code 1003
+    #[error("Parse error: {0}")]
+    ParseError(String),
     // code 2000
     #[error("Unknown error: {0}")]
     Unknown(String),
@@ -36,6 +39,11 @@ impl From<PathServerError> for tower_lsp::jsonrpc::Error {
             PathServerError::Unsupported(msg) => jsonrpc::Error {
                 code: jsonrpc::ErrorCode::ServerError(1002),
                 message: std::borrow::Cow::Borrowed("Unsupported"),
+                data: Some(Value::String(msg)),
+            },
+            PathServerError::ParseError(msg) => jsonrpc::Error {
+                code: jsonrpc::ErrorCode::ServerError(1003),
+                message: std::borrow::Cow::Borrowed("Parse error"),
                 data: Some(Value::String(msg)),
             },
             PathServerError::Unknown(msg) => jsonrpc::Error {

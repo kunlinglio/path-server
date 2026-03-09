@@ -4,6 +4,7 @@ Path Server is a fast and lightweight Language Server Protocol (LSP) implementat
 
 ## Features
 - **Path Completion**: Provides real-time suggestions for both relative and absolute paths.
+- **Path highlight and jump**: Automatically detects and underlines valid file paths in the editor, making them clickable for direct navigation.
 - **Fast and Lightweight**: Native-level response speed. Consumes only ~5MB memory with very low CPU usage.
 - **Language Compatibility**: Supports all text files, regardless of the programming language.
 - **Cross IDEs**: Works seamlessly with any editor that supports the Language Server Protocol (e.g., VS Code, Zed, Neovim).
@@ -45,7 +46,6 @@ You can use it by installing specified extension for your editor.
       }
     }
   }
-  // ...other configs...
 }
 ```
 

@@ -26,6 +26,12 @@ pub async fn debug(message: String) {
     }
 }
 
+pub fn debug_sync(message: String) {
+    tokio::spawn(async move {
+        debug(message).await;
+    });
+}
+
 pub async fn log(message: String) {
     if cfg!(test) {
         eprintln!("[LOG] {}", message);
@@ -33,7 +39,7 @@ pub async fn log(message: String) {
     }
     if let Some(client) = LSP_CLIENT.get() {
         client
-            .log_message(lsp_types::MessageType::LOG, format!("[LOG] {}", message))
+            .log_message(lsp_types::MessageType::INFO, format!("[LOG] {}", message))
             .await;
     } else {
         panic!("Failed to log: lopper is not initialized!")
@@ -47,7 +53,10 @@ pub async fn warn(message: String) {
     }
     if let Some(client) = LSP_CLIENT.get() {
         client
-            .log_message(lsp_types::MessageType::INFO, format!("[WARN] {}", message))
+            .log_message(
+                lsp_types::MessageType::WARNING,
+                format!("[WARN] {}", message),
+            )
             .await;
     } else {
         panic!("Failed to log: lopper is not initialized!")
