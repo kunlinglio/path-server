@@ -65,7 +65,7 @@ pub async fn provide_document_links(
                     path.display()
                 ))
             })?),
-            tooltip: Some("Follow path".into()),
+            tooltip: Some("Open file".into()),
             data: None,
         });
     }

@@ -5,7 +5,14 @@ All notable changes to the Path Server will be documented in this file.
 ## [Unreleased]
 ### Added
 - **Core**: Support automatically triggering next completion after selecting a completion.
-- **Core**: Add config entry: `path-server.completion.triggerNextCompletion`.
+- **Core**: Added config entry: `path-server.completion.triggerNextCompletion`.
+- **Core**: Added **Document Links** provider support in supported editors. (zed's api does not supported it for now)
+    - Automatically detects and underlines valid file paths in the editor.
+    - Making paths clickable and allowing users to jump directly to the target file .
+    - *Note: Currently not supported in Zed due to API limitations*
+- **Core**: Added **Go to Definition** provider support.
+    - Enables standard "Go to Definition" functionality for string-based file paths.
+    - Users can now use editor shortcuts (e.g., `Cmd/Ctrl + Click` or `F12`) to instantly open the file referenced by a path.
 - **VS Code**: Add command `Path Server: Restart Server` to restart the Path Server.
 
 ## [0.3.0] 2026-03-06
