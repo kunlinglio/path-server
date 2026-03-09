@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 use futures::future;
 use tower_lsp::lsp_types;
 
-use crate::async_fs;
-use crate::common::*;
 use crate::document::Document;
+use crate::error::*;
+use crate::fs;
 use crate::logger::*;
 use crate::parser::{PathCandidate, parse_document};
 
@@ -22,7 +22,7 @@ pub async fn provide_document_links(
                 for candidate in candidates {
                     let path = PathBuf::from(&candidate.content);
                     if path.is_absolute() {
-                        if async_fs::exists(&path).await {
+                        if fs::exists(&path).await {
                             return Some((candidate, path));
                         }
                     } else if path.is_relative() {
@@ -31,7 +31,7 @@ pub async fn provide_document_links(
                             continue;
                         };
                         let full_path = base_path.join(&path);
-                        if async_fs::exists(&full_path).await {
+                        if fs::exists(&full_path).await {
                             return Some((candidate, full_path));
                         }
                     } else {

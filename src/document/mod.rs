@@ -1,21 +1,23 @@
+mod language;
+pub use language::Language;
+
 use line_index::{LineIndex, TextSize, WideEncoding, WideLineCol};
 use tower_lsp::lsp_types;
 use tree_sitter::Tree;
 
-use crate::common::*;
-use crate::languages::Language;
+use crate::error::*;
 use crate::parser::update_tree;
 
 #[derive(Debug, Clone)]
 pub struct Document {
     /// Raw text
     pub text: String,
-    /// Index for line/column -> offset calculations
-    index: LineIndex,
     /// Language if from lsp client
     pub language: Language,
+    /// Index for line/column -> offset calculations
+    index: LineIndex,
     /// Tree-sitter AST tree for incremental parsing
-    pub tree: Option<Tree>,
+    tree: Option<Tree>,
 }
 
 impl Document {
@@ -34,6 +36,7 @@ impl Document {
         &mut self,
         change: &lsp_types::TextDocumentContentChangeEvent,
     ) -> PathServerResult<()> {
+        // TODO: optimize performance by lazy refresh index and tree
         if change.range.is_none() {
             self.text = change.text.clone();
             self.tree = update_tree(self)?;
@@ -79,6 +82,10 @@ impl Document {
     pub fn utf16_pos_to_offset(&self, line: usize, character: usize) -> PathServerResult<usize> {
         position_to_offset(&self.index, line, character)
     }
+
+    pub fn get_tree(&self) -> Option<&Tree> {
+        self.tree.as_ref()
+    }
 }
 
 /// Convert UTF-16 line/column to byte offset
@@ -107,7 +114,8 @@ fn position_to_offset(index: &LineIndex, line: usize, character: usize) -> PathS
 }
 
 fn offset_to_position(index: &LineIndex, offset: usize) -> PathServerResult<(usize, usize)> {
-    let line_col = index.line_col(TextSize::new(offset as u32));
+    let text_offset = TextSize::new(offset as u32);
+    let line_col = index.line_col(text_offset);
     let Some(wide_offset) = index.to_wide(WideEncoding::Utf16, line_col) else {
         return Err(PathServerError::EncodingError(format!(
             "Failed to convert offset to wide position for offset {}",

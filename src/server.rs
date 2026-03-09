@@ -5,13 +5,13 @@ use tokio::sync::RwLock;
 use tower_lsp::jsonrpc;
 use tower_lsp::lsp_types;
 
-use crate::common::*;
 use crate::config;
 use crate::document::Document;
+use crate::error::*;
+use crate::fs::url_to_path;
 use crate::logger::{self, *};
 use crate::parser;
 use crate::providers;
-use crate::utils::url_to_path;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 

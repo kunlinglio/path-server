@@ -1,10 +1,10 @@
-mod document;
 mod extractor;
-mod inline;
+mod line;
+mod path;
 
-pub use document::parse_document;
 pub use extractor::update_tree;
-pub use inline::{parse_line, separate_prefix};
+pub use line::{parse_line, separate_prefix};
+pub use path::parse_document;
 
 /// Represents a parsed string in the source code with its range
 #[derive(Debug, Clone)]

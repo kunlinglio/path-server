@@ -5,12 +5,11 @@ use futures::future;
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use tower_lsp::lsp_types;
 
-use crate::async_fs;
-use crate::common::*;
 use crate::config;
+use crate::error::*;
+use crate::fs;
 use crate::logger::*;
 use crate::parser;
-use crate::utils;
 
 /// The wrapper struct inside this module to store additional information.
 struct CompletionItemInner {
@@ -147,11 +146,11 @@ async fn generate_completions(
     trigger_next: bool,
 ) -> PathServerResult<Vec<CompletionItemInner>> {
     let dir = root.join(base_dir);
-    if !async_fs::exists(&dir).await {
+    if !fs::exists(&dir).await {
         debug(format!("Base directory does not exist: {}", dir.display())).await;
         return Ok(vec![]);
     }
-    if !async_fs::is_dir(&dir).await {
+    if !fs::is_dir(&dir).await {
         debug(format!(
             "Base directory is not a directory: {}",
             dir.display()
@@ -160,7 +159,7 @@ async fn generate_completions(
         return Ok(vec![]);
     }
 
-    let completions = future::try_join_all(async_fs::read_dir(&dir).await?.into_iter().map(
+    let completions = future::try_join_all(fs::read_dir(&dir).await?.into_iter().map(
         |file| async move {
             let filename = file.file_name().into_string().map_err(|os_str| {
                 PathServerError::EncodingError(format!(
@@ -171,10 +170,10 @@ async fn generate_completions(
             if !filename.starts_with(partial_name) {
                 return PathServerResult::Ok(None);
             }
-            if !show_hidden_files && utils::is_hidden_file(&file.path())? {
+            if !show_hidden_files && fs::is_hidden_file(&file.path())? {
                 return Ok(None);
             }
-            if async_fs::is_dir(&file.path()).await {
+            if fs::is_dir(&file.path()).await {
                 let completion = CompletionItemInner {
                     completion: lsp_types::CompletionItem {
                         label: filename.clone(),

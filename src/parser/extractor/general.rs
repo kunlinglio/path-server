@@ -2,7 +2,7 @@
 use regex::Regex;
 
 use super::PathCandidate;
-use crate::{common::PathServerError, document::Document};
+use crate::{document::Document, error::PathServerError};
 
 pub fn extract_string(document: &Document) -> Option<Vec<PathCandidate>> {
     let string_regexes = [r#"\"([^\"]*)\""#, r#"'([^']*)'"#, r#"`([^`]*)`"#];

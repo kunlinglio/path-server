@@ -1,12 +1,11 @@
-use crate::common::*;
-use crate::document::Document;
-use crate::languages::Language;
+use crate::document::{Document, Language};
+use crate::error::*;
 
 use super::super::PathCandidate;
 
 /// Tree sitter languages
 mod ts_languages {
-    use crate::languages::Language;
+    use crate::document::Language;
     use std::sync::OnceLock;
 
     static JS_LANGUAGE: OnceLock<tree_sitter::Language> = OnceLock::new();
@@ -51,7 +50,7 @@ mod ts_languages {
 }
 
 pub fn update_tree(new_document: &Document) -> PathServerResult<Option<tree_sitter::Tree>> {
-    let old_tree = new_document.tree.as_ref();
+    let old_tree = new_document.get_tree();
     let Some(ts_language) = ts_languages::from_language(&new_document.language) else {
         return Ok(None);
     };
@@ -65,7 +64,7 @@ pub fn update_tree(new_document: &Document) -> PathServerResult<Option<tree_sitt
 /// Extract string literals from source code using tree-sitter
 /// Returns a vector of StringLiteral with their positions in the source
 pub fn extract_strings(document: &Document) -> Option<Vec<PathCandidate>> {
-    let Some(tree) = &document.tree else {
+    let Some(tree) = document.get_tree() else {
         return None;
     };
 
@@ -86,9 +85,10 @@ fn extract_strings_recursive(
     let mut strings = Vec::new();
     // Check if this node is a string
     if is_string_node(node, language)
-        && let Some(literal) = extract_string_content(source, node) {
-            strings.push(literal);
-        }
+        && let Some(literal) = extract_string_content(source, node)
+    {
+        strings.push(literal);
+    }
 
     // Recursively process children
     let mut cursor = node.walk();
