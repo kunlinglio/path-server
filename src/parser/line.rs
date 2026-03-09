@@ -175,4 +175,13 @@ mod test {
         assert_eq!(base, "./");
         assert_eq!(partial, ".config");
     }
+
+    #[test]
+    fn test_hybrid_paths() {
+        assert_eq!(
+            parse_line(r"\\127.0.0.1\c$\temp\file.txt"),
+            r"\\127.0.0.1\c$\temp\file.txt"
+        );
+        assert_eq!(parse_line(r"//server/share/path"), "//server/share/path");
+    }
 }
