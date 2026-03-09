@@ -99,7 +99,7 @@ impl tower_lsp::LanguageServer for PathServer {
                 }),
                 // for path jumping
                 definition_provider: Some(lsp_types::OneOf::Left(true)),
-                // detecters
+                // detectors
                 text_document_sync: Some(lsp_types::TextDocumentSyncCapability::Kind(
                     lsp_types::TextDocumentSyncKind::INCREMENTAL,
                 )),
@@ -171,10 +171,16 @@ impl tower_lsp::LanguageServer for PathServer {
             .await;
             return;
         };
-        documents.insert(
-            path,
-            Document::new(params.text_document.text, &params.text_document.language_id).unwrap(),
-        );
+        let Ok(doc) = Document::new(params.text_document.text, &params.text_document.language_id)
+        else {
+            warn(format!(
+                "Failed to create document for: {}",
+                params.text_document.uri
+            ))
+            .await;
+            return;
+        };
+        documents.insert(path, doc);
     }
 
     async fn did_change(&self, params: lsp_types::DidChangeTextDocumentParams) {
@@ -192,9 +198,7 @@ impl tower_lsp::LanguageServer for PathServer {
             return;
         };
         let mut docs = self.documents.write().await;
-        let doc = docs
-            .entry(path)
-            .or_insert_with(|| Document::new(String::new(), "").unwrap());
+        let doc = docs.entry(path).or_insert_with(|| Document::default());
         // apply each change in order
         for change in params.content_changes.into_iter() {
             let result = doc.apply_change(&change);

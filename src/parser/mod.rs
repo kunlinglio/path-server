@@ -2,7 +2,7 @@ mod extractor;
 mod line;
 mod path;
 
-pub use extractor::update_tree;
+pub use extractor::{new_tree, update_tree};
 pub use line::{parse_line, separate_prefix};
 pub use path::parse_document;
 
@@ -14,6 +14,7 @@ pub struct PathCandidate {
     pub end_byte: usize,
 }
 
+#[allow(dead_code)]
 impl PathCandidate {
     fn char_count(&self) -> usize {
         self.content.chars().count()
@@ -31,8 +32,9 @@ impl PathCandidate {
             .map(|(b, _)| b)
             .expect("char index out of bounds")
     }
+
     /// Return an owned PathCandidate for a char-based range
-    fn slice(&self, start: usize, end: usize) -> PathCandidate {
+    pub fn slice(&self, start: usize, end: usize) -> PathCandidate {
         if start > end {
             panic!("range start greater than end");
         }
@@ -50,9 +52,24 @@ impl PathCandidate {
         }
     }
 
-    // pub fn len(&self) -> usize {
-    //     self.content.len()
-    // }
+    pub fn slice_bytes(&self, start_byte: usize, end_byte: usize) -> PathCandidate {
+        if start_byte > end_byte {
+            panic!("byte range start greater than end");
+        }
+        if end_byte > self.content.len() {
+            panic!("byte range end out of bounds");
+        }
+        let slice = &self.content[start_byte..end_byte];
+        PathCandidate {
+            content: slice.to_string(),
+            start_byte: self.start_byte + start_byte,
+            end_byte: self.start_byte + end_byte,
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.content.len()
+    }
 
     /// Trim the space from both begin and end
     pub fn trim(&self) -> PathCandidate {

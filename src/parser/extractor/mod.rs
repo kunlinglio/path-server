@@ -2,7 +2,7 @@ use crate::{document::Document, parser::PathCandidate};
 mod general;
 mod tree_sitter;
 
-pub use tree_sitter::update_tree;
+pub use tree_sitter::{new_tree, update_tree};
 
 pub fn extract_string(document: &Document) -> Vec<PathCandidate> {
     // crate::logger::debug_sync("@@@".into());

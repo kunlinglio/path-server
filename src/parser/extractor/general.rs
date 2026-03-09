@@ -1,4 +1,4 @@
-//! Regex based parser for fullback
+//! Regex based parser for fallback
 use regex::Regex;
 
 use super::PathCandidate;

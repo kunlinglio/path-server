@@ -49,24 +49,63 @@ mod ts_languages {
     }
 }
 
-pub fn update_tree(new_document: &Document) -> PathServerResult<Option<tree_sitter::Tree>> {
-    let old_tree = new_document.get_tree();
-    let Some(ts_language) = ts_languages::from_language(&new_document.language) else {
+pub fn new_tree(document: &Document) -> PathServerResult<Option<tree_sitter::Tree>> {
+    let Some(ts_language) = ts_languages::from_language(&document.language) else {
         return Ok(None);
     };
     let mut parser = tree_sitter::Parser::new();
     parser.set_language(&ts_language).map_err(|e| {
         PathServerError::ParseError(format!("Set language to tree-sitter failed: {}", e))
     })?;
-    Ok(parser.parse(&new_document.text, old_tree))
+    Ok(parser.parse(&document.text, None))
+}
+
+pub fn update_tree(
+    old_document: &Document,
+    mut old_tree: Option<tree_sitter::Tree>,
+    new_document: &Document, // the document has updated every member except the tree
+    change_start_byte: usize,
+    change_old_end_byte: usize, // the byte range of the change in the old document
+    change_new_end_byte: usize, // the byte range of the change in the new document
+) -> PathServerResult<Option<tree_sitter::Tree>> {
+    let Some(ts_language) = ts_languages::from_language(&new_document.language) else {
+        return Ok(None);
+    };
+    // prepare InputEdit for tree-sitter
+    let start = old_document.offset_to_utf8_pos(change_start_byte)?;
+    let old_end = old_document.offset_to_utf8_pos(change_old_end_byte)?;
+    let new_end = new_document.offset_to_utf8_pos(change_new_end_byte)?;
+    let edit = tree_sitter::InputEdit {
+        start_byte: change_start_byte,
+        old_end_byte: change_old_end_byte,
+        new_end_byte: change_new_end_byte,
+        start_position: tree_sitter::Point {
+            row: start.0,
+            column: start.1,
+        },
+        old_end_position: tree_sitter::Point {
+            row: old_end.0,
+            column: old_end.1,
+        },
+        new_end_position: tree_sitter::Point {
+            row: new_end.0,
+            column: new_end.1,
+        },
+    };
+    if let Some(ref mut tree) = old_tree {
+        tree.edit(&edit);
+    }
+    let mut parser = tree_sitter::Parser::new();
+    parser.set_language(&ts_language).map_err(|e| {
+        PathServerError::ParseError(format!("Set language to tree-sitter failed: {}", e))
+    })?;
+    Ok(parser.parse(&new_document.text, old_tree.as_ref()))
 }
 
 /// Extract string literals from source code using tree-sitter
 /// Returns a vector of StringLiteral with their positions in the source
 pub fn extract_strings(document: &Document) -> Option<Vec<PathCandidate>> {
-    let Some(tree) = document.get_tree() else {
-        return None;
-    };
+    let tree = document.get_tree()?;
 
     // Query to extract string nodes (varies by language)
     Some(extract_strings_recursive(

@@ -37,9 +37,9 @@ pub async fn provide_definition(
                         .await;
                         continue;
                     };
-                    let full_path = tokio::fs::canonicalize(base_path.join(&path)).await?;
+                    let full_path = base_path.join(&path);
                     if fs::exists(&full_path).await {
-                        return Ok(Some((candidate, full_path)));
+                        return Ok(Some((candidate, tokio::fs::canonicalize(full_path).await?)));
                     }
                 } else {
                     unreachable!();
@@ -53,7 +53,7 @@ pub async fn provide_definition(
     .flatten();
 
     let current_token: Vec<(PathCandidate, PathBuf)> = tokens
-        .filter(|token| cursor_offset > token.0.start_byte && cursor_offset < token.0.end_byte)
+        .filter(|token| cursor_offset >= token.0.start_byte && cursor_offset < token.0.end_byte)
         .collect();
 
     if current_token.is_empty() {

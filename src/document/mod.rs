@@ -6,7 +6,7 @@ use tower_lsp::lsp_types;
 use tree_sitter::Tree;
 
 use crate::error::*;
-use crate::parser::update_tree;
+use crate::parser::{new_tree, update_tree};
 
 #[derive(Debug, Clone)]
 pub struct Document {
@@ -20,6 +20,17 @@ pub struct Document {
     tree: Option<Tree>,
 }
 
+impl Default for Document {
+    fn default() -> Self {
+        Self {
+            text: String::new(),
+            index: LineIndex::new(""),
+            language: Language::Unknown("".into()),
+            tree: None,
+        }
+    }
+}
+
 impl Document {
     pub fn new(text: String, language_id: &str) -> PathServerResult<Self> {
         let mut doc = Self {
@@ -28,7 +39,7 @@ impl Document {
             language: Language::from_id(language_id),
             tree: None,
         };
-        doc.tree = update_tree(&doc)?;
+        doc.tree = new_tree(&doc)?;
         Ok(doc)
     }
 
@@ -38,25 +49,38 @@ impl Document {
     ) -> PathServerResult<()> {
         // TODO: optimize performance by lazy refresh index and tree
         if change.range.is_none() {
-            self.text = change.text.clone();
-            self.tree = update_tree(self)?;
+            *self = Self::new(change.text.clone(), &self.language.to_string())?;
             return Ok(());
         }
         let range = change.range.as_ref().unwrap();
-        let start = position_to_offset(
-            &self.index,
-            range.start.line as usize,
-            range.start.character as usize,
-        )?;
-        let end = position_to_offset(
-            &self.index,
-            range.end.line as usize,
-            range.end.character as usize,
-        )?;
+        let start_byte =
+            self.utf16_pos_to_offset(range.start.line as usize, range.start.character as usize)?;
+        let old_end_byte =
+            self.utf16_pos_to_offset(range.end.line as usize, range.end.character as usize)?;
+        let new_end_byte = start_byte + change.text.len();
+        let mut old_document = std::mem::replace(self, Self::default());
 
-        self.text.replace_range(start..end, &change.text);
-        self.index = LineIndex::new(&self.text);
-        self.tree = update_tree(self)?;
+        // construct new self with updated text and index, but old tree
+        let mut new_text = std::mem::take(&mut old_document.text);
+        new_text.replace_range(start_byte..old_end_byte, &change.text);
+        let new_index = LineIndex::new(&new_text);
+        *self = Self {
+            text: new_text,
+            index: new_index,
+            tree: None,
+            language: old_document.language.clone(),
+        };
+
+        // update tree
+        let old_tree = old_document.tree.take();
+        self.tree = update_tree(
+            &old_document,
+            old_tree,
+            self,
+            start_byte,
+            old_end_byte,
+            new_end_byte,
+        )?;
         Ok(())
     }
 
@@ -65,22 +89,26 @@ impl Document {
         line_number: usize,
         end_char: Option<usize>,
     ) -> PathServerResult<String> {
-        let line_start = position_to_offset(&self.index, line_number, 0)?;
+        let line_start = self.utf16_pos_to_offset(line_number, 0)?;
         let line_end = if let Some(end_char) = end_char {
-            position_to_offset(&self.index, line_number, end_char)?
+            self.utf16_pos_to_offset(line_number, end_char)?
         } else {
-            position_to_offset(&self.index, line_number + 1, 0).unwrap_or(self.text.len())
+            self.utf16_pos_to_offset(line_number + 1, 0)?
         };
 
         Ok(self.text[line_start..line_end].to_string())
     }
 
     pub fn offset_to_utf16_pos(&self, offset: usize) -> PathServerResult<(usize, usize)> {
-        offset_to_position(&self.index, offset)
+        offset_to_utf16_position(&self.index, offset)
     }
 
     pub fn utf16_pos_to_offset(&self, line: usize, character: usize) -> PathServerResult<usize> {
-        position_to_offset(&self.index, line, character)
+        utf16_position_to_offset(&self.index, line, character)
+    }
+
+    pub fn offset_to_utf8_pos(&self, offset: usize) -> PathServerResult<(usize, usize)> {
+        offset_to_utf8_position(&self.index, offset)
     }
 
     pub fn get_tree(&self) -> Option<&Tree> {
@@ -91,7 +119,11 @@ impl Document {
 /// Convert UTF-16 line/column to byte offset
 /// - "column" in (line, column) is the the "utf-16 code unit" offset, in which a emoji/Chinese character may span 2 units.
 /// - (line, column) in UTF-8 is the all "byte offset" based
-fn position_to_offset(index: &LineIndex, line: usize, character: usize) -> PathServerResult<usize> {
+fn utf16_position_to_offset(
+    index: &LineIndex,
+    line: usize,
+    character: usize,
+) -> PathServerResult<usize> {
     let wide_line_col = WideLineCol {
         line: line as u32,
         col: character as u32,
@@ -113,7 +145,7 @@ fn position_to_offset(index: &LineIndex, line: usize, character: usize) -> PathS
     Ok(char_offset.into())
 }
 
-fn offset_to_position(index: &LineIndex, offset: usize) -> PathServerResult<(usize, usize)> {
+fn offset_to_utf16_position(index: &LineIndex, offset: usize) -> PathServerResult<(usize, usize)> {
     let text_offset = TextSize::new(offset as u32);
     let line_col = index.line_col(text_offset);
     let Some(wide_offset) = index.to_wide(WideEncoding::Utf16, line_col) else {
@@ -125,6 +157,12 @@ fn offset_to_position(index: &LineIndex, offset: usize) -> PathServerResult<(usi
     Ok((wide_offset.line as usize, wide_offset.col as usize))
 }
 
+fn offset_to_utf8_position(index: &LineIndex, offset: usize) -> PathServerResult<(usize, usize)> {
+    let text_offset = TextSize::new(offset as u32);
+    let line_col = index.line_col(text_offset);
+    Ok((line_col.line as usize, line_col.col as usize))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -134,10 +172,10 @@ mod tests {
         let text = r#"Hello
 World"#;
         let index = LineIndex::new(text);
-        assert_eq!(position_to_offset(&index, 0, 0).unwrap(), 0);
-        assert_eq!(position_to_offset(&index, 0, 5).unwrap(), 5);
-        assert_eq!(position_to_offset(&index, 1, 0).unwrap(), 6);
-        assert_eq!(position_to_offset(&index, 1, 5).unwrap(), 11);
+        assert_eq!(utf16_position_to_offset(&index, 0, 0).unwrap(), 0);
+        assert_eq!(utf16_position_to_offset(&index, 0, 5).unwrap(), 5);
+        assert_eq!(utf16_position_to_offset(&index, 1, 0).unwrap(), 6);
+        assert_eq!(utf16_position_to_offset(&index, 1, 5).unwrap(), 11);
     }
 
     #[test]
@@ -150,32 +188,38 @@ World"#;
         ];
         let index = LineIndex::new(&text.concat());
         // test start of line
-        assert_eq!(position_to_offset(&index, 0, 0).unwrap(), 0);
-        assert_eq!(position_to_offset(&index, 1, 0).unwrap(), 0 + text[0].len());
+        assert_eq!(utf16_position_to_offset(&index, 0, 0).unwrap(), 0);
         assert_eq!(
-            position_to_offset(&index, 2, 0).unwrap(),
+            utf16_position_to_offset(&index, 1, 0).unwrap(),
+            0 + text[0].len()
+        );
+        assert_eq!(
+            utf16_position_to_offset(&index, 2, 0).unwrap(),
             0 + text[0].len() + text[1].len()
         );
         assert_eq!(
-            position_to_offset(&index, 3, 0).unwrap(),
+            utf16_position_to_offset(&index, 3, 0).unwrap(),
             0 + text[0].len() + text[1].len() + text[2].len()
         );
         assert_eq!(
-            position_to_offset(&index, 4, 0).unwrap(),
+            utf16_position_to_offset(&index, 4, 0).unwrap(),
             0 + text[0].len() + text[1].len() + text[2].len() + text[3].len()
         );
         // test middle of line
-        assert_eq!(position_to_offset(&index, 0, 4).unwrap(), "这是一个".len());
         assert_eq!(
-            position_to_offset(&index, 1, 1).unwrap(),
+            utf16_position_to_offset(&index, 0, 4).unwrap(),
+            "这是一个".len()
+        );
+        assert_eq!(
+            utf16_position_to_offset(&index, 1, 1).unwrap(),
             0 + text[0].len() + "這".len()
         );
         assert_eq!(
-            position_to_offset(&index, 2, 10).unwrap(),
+            utf16_position_to_offset(&index, 2, 10).unwrap(),
             0 + text[0].len() + text[1].len() + "これはUTF-8文字".len()
         );
         assert_eq!(
-            position_to_offset(&index, 3, 20).unwrap(),
+            utf16_position_to_offset(&index, 3, 20).unwrap(),
             0 + text[0].len()
                 + text[1].len()
                 + text[2].len()

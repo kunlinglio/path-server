@@ -31,7 +31,7 @@ fn extract_paths_from_string(path_ref: PathCandidate) -> Vec<PathCandidate> {
         if end > last_pos {
             let sub_content = &content[last_pos..end];
             if sub_content.contains('/') || sub_content.contains('\\') {
-                results.push(path_ref.slice(last_pos, end).trim());
+                results.push(path_ref.slice_bytes(last_pos, end).trim());
             }
         }
         last_pos = end + 1;
@@ -40,7 +40,7 @@ fn extract_paths_from_string(path_ref: PathCandidate) -> Vec<PathCandidate> {
     if last_pos < content.len() {
         let sub_content = &content[last_pos..];
         if sub_content.contains('/') || sub_content.contains('\\') {
-            results.push(path_ref.slice(last_pos, content.len()).trim());
+            results.push(path_ref.slice_bytes(last_pos, content.len()).trim());
         }
     }
 
@@ -102,5 +102,19 @@ mod tests {
             eprintln!("Extracted: {};", p.content);
         }
         assert!(res.iter().any(|p| p.content.trim() == "/tmp/dir/"));
+    }
+
+    #[test]
+    fn test_extract_paths_with_utf8() {
+        let candidate = PathCandidate {
+            content: "路径在 /tmp/目录/ ".to_string(), // UTF-8 characters
+            start_byte: 0,
+            end_byte: 24,
+        };
+        let res = extract_paths_from_string(candidate);
+        for p in &res {
+            eprintln!("Extracted: {};", p.content);
+        }
+        assert!(res.iter().any(|p| p.content.trim() == "/tmp/目录/"));
     }
 }
