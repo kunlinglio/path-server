@@ -97,7 +97,12 @@ mod tests {
         let links = provide_document_links(&doc, &current_file).await.unwrap();
         assert_eq!(links.len(), 1);
         let url = links[0].target.as_ref().unwrap();
-        assert_eq!(url.to_file_path().unwrap(), target);
+        assert_eq!(
+            tokio::fs::canonicalize(url.to_file_path().unwrap())
+                .await
+                .unwrap(),
+            tokio::fs::canonicalize(&target).await.unwrap()
+        );
     }
 
     #[tokio::test]
