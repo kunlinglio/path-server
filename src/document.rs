@@ -36,7 +36,7 @@ impl Document {
     ) -> PathServerResult<()> {
         if change.range.is_none() {
             self.text = change.text.clone();
-            self.tree = update_tree(&self)?;
+            self.tree = update_tree(self)?;
             return Ok(());
         }
         let range = change.range.as_ref().unwrap();
@@ -53,7 +53,7 @@ impl Document {
 
         self.text.replace_range(start..end, &change.text);
         self.index = LineIndex::new(&self.text);
-        self.tree = update_tree(&self)?;
+        self.tree = update_tree(self)?;
         Ok(())
     }
 
@@ -72,8 +72,12 @@ impl Document {
         Ok(self.text[line_start..line_end].to_string())
     }
 
-    pub fn utf_16_pos(&self, offset: usize) -> PathServerResult<(usize, usize)> {
+    pub fn offset_to_utf16_pos(&self, offset: usize) -> PathServerResult<(usize, usize)> {
         offset_to_position(&self.index, offset)
+    }
+
+    pub fn utf16_pos_to_offset(&self, line: usize, character: usize) -> PathServerResult<usize> {
+        position_to_offset(&self.index, line, character)
     }
 }
 

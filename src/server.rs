@@ -158,7 +158,7 @@ impl tower_lsp::LanguageServer for PathServer {
 
     async fn did_open(&self, params: lsp_types::DidOpenTextDocumentParams) {
         debug(format!(
-            "Opening document: {}, language: {}",
+            "<Document Sync> Opening document: {}, language: {}",
             params.text_document.uri, params.text_document.language_id
         ))
         .await;
@@ -178,7 +178,11 @@ impl tower_lsp::LanguageServer for PathServer {
     }
 
     async fn did_change(&self, params: lsp_types::DidChangeTextDocumentParams) {
-        debug(format!("Changing document: {}", params.text_document.uri)).await;
+        debug(format!(
+            "<Document Sync> Changing document: {}",
+            params.text_document.uri
+        ))
+        .await;
         let Ok(path) = url_to_path(&params.text_document.uri) else {
             warn(format!(
                 "Failed to convert URI to file path: {}",
@@ -207,7 +211,11 @@ impl tower_lsp::LanguageServer for PathServer {
     }
 
     async fn did_close(&self, params: lsp_types::DidCloseTextDocumentParams) {
-        debug(format!("Closing document: {}", params.text_document.uri)).await;
+        debug(format!(
+            "<Document Sync> Closing document: {}",
+            params.text_document.uri
+        ))
+        .await;
         let Ok(path) = url_to_path(&params.text_document.uri) else {
             warn(format!(
                 "Failed to convert URI to file path: {}",
@@ -247,7 +255,11 @@ impl tower_lsp::LanguageServer for PathServer {
 
         // parse the line
         let raw_path = parser::parse_line(&line_prefix);
-        debug(format!("Completing for prefix: '{}'", raw_path)).await;
+        debug(format!(
+            "<Completion> Completing for prefix: '{}'",
+            raw_path
+        ))
+        .await;
 
         // completion
         let completion_config = self.get_config().await.completion;
@@ -267,6 +279,11 @@ impl tower_lsp::LanguageServer for PathServer {
             &completion_config,
         )
         .await?;
+        debug(format!(
+            "<Completion> Generated completions: {}",
+            completions.len()
+        ))
+        .await;
 
         return Ok(Some(lsp_types::CompletionResponse::Array(completions)));
     }
@@ -276,7 +293,7 @@ impl tower_lsp::LanguageServer for PathServer {
         params: lsp_types::DocumentLinkParams,
     ) -> jsonrpc::Result<Option<Vec<lsp_types::DocumentLink>>> {
         debug(format!(
-            "Processing document link request for: {}",
+            "<Document Link> Processing document link request for: {}",
             params.text_document.uri
         ))
         .await;
@@ -295,7 +312,11 @@ impl tower_lsp::LanguageServer for PathServer {
         };
 
         let links = providers::link::provide_document_links(doc, &path).await?;
-        debug(format!("Generated document links: {}", links.len())).await;
+        debug(format!(
+            "<Document Link> Generated document links: {}",
+            links.len()
+        ))
+        .await;
         Ok(Some(links))
     }
 
@@ -304,7 +325,7 @@ impl tower_lsp::LanguageServer for PathServer {
         params: lsp_types::GotoDefinitionParams,
     ) -> jsonrpc::Result<Option<lsp_types::GotoDefinitionResponse>> {
         debug(format!(
-            "Processing goto definition request for: {}",
+            "<Goto Definition> Processing goto definition request for: {}",
             params.text_document_position_params.text_document.uri
         ))
         .await;
@@ -329,7 +350,18 @@ impl tower_lsp::LanguageServer for PathServer {
             return Ok(None);
         };
 
-        let definition = providers::definition::provide_definition(doc, line, character).await?;
+        let definition =
+            providers::definition::provide_definition(doc, line, character, &path).await?;
+        if let Some(definition) = &definition {
+            let lsp_types::GotoDefinitionResponse::Scalar(definition) = &definition else {
+                unreachable!("Definition is not a scalar");
+            };
+            debug(format!(
+                "<Goto Definition> Generated definition to: {}",
+                definition.uri
+            ))
+            .await;
+        }
         Ok(definition)
     }
 }

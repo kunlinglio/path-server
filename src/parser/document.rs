@@ -2,16 +2,14 @@
 use std::vec::Vec;
 
 use crate::document::Document;
-use crate::logger::*;
 
 use super::PathCandidate;
 use super::extractor::extract_string;
 
 pub fn parse_document(document: &Document) -> Vec<Vec<PathCandidate>> {
-    let strings = extract_string(document);
     extract_string(document)
         .into_iter()
-        .map(|s| extract_paths_from_string(s))
+        .map(extract_paths_from_string)
         .collect()
 }
 

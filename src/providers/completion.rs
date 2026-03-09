@@ -38,7 +38,7 @@ pub async fn complete(
         generate_completions(
             &base_dir,
             &partial_name,
-            &Path::new(""),
+            Path::new(""),
             completion_config.show_hidden_files,
             completion_config.trigger_next_completion,
         )
@@ -59,7 +59,7 @@ pub async fn complete(
             generate_completions(
                 &base_dir,
                 &partial_name,
-                &base_path,
+                base_path,
                 completion_config.show_hidden_files,
                 completion_config.trigger_next_completion,
             )
@@ -214,8 +214,7 @@ async fn generate_completions(
     ))
     .await?
     .into_iter()
-    .filter(Option::is_some)
-    .map(|x| x.unwrap())
+    .flatten()
     .collect();
     Ok(completions)
 }

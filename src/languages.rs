@@ -99,6 +99,6 @@ pub enum Language {
 
 impl Language {
     pub fn from_id(language_id: &str) -> Language {
-        Language::try_from(language_id).unwrap_or(Language::Unknown(language_id.to_string()))
+        Language::from(language_id)
     }
 }

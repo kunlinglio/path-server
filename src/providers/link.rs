@@ -43,16 +43,15 @@ pub async fn provide_document_links(
     )
     .await
     .into_iter()
-    .filter(Option::is_some)
-    .map(|x| x.unwrap())
+    .flatten()
     .collect();
 
     let mut links = vec![];
     for token in tokens {
         let candidate = token.0;
         let path = token.1;
-        let start = doc.utf_16_pos(candidate.start_byte)?;
-        let end = doc.utf_16_pos(candidate.end_byte)?;
+        let start = doc.offset_to_utf16_pos(candidate.start_byte)?;
+        let end = doc.offset_to_utf16_pos(candidate.end_byte)?;
         let range = lsp_types::Range::new(
             lsp_types::Position::new(start.0 as u32, start.1 as u32),
             lsp_types::Position::new(end.0 as u32, end.1 as u32),

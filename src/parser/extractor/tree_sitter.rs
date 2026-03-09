@@ -85,11 +85,10 @@ fn extract_strings_recursive(
 ) -> Vec<PathCandidate> {
     let mut strings = Vec::new();
     // Check if this node is a string
-    if is_string_node(node, &language) {
-        if let Some(literal) = extract_string_content(source, node) {
+    if is_string_node(node, language)
+        && let Some(literal) = extract_string_content(source, node) {
             strings.push(literal);
         }
-    }
 
     // Recursively process children
     let mut cursor = node.walk();
