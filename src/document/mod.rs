@@ -62,7 +62,6 @@ impl Document {
         &mut self,
         change: lsp_types::TextDocumentContentChangeEvent,
     ) -> PathServerResult<()> {
-        // TODO: optimize performance by lazy refresh index and tree
         if change.range.is_none() {
             *self = Self::new(change.text, &self.language.to_string())?;
             return Ok(());

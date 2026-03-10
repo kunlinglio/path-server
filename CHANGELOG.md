@@ -3,6 +3,9 @@
 All notable changes to the Path Server will be documented in this file.
 
 ## [Unreleased]
+### Added
+- **VS Code**: Included `CHANGELOG.md` inside package.
+
 ### Fixed
 - **Core**: Fix highlight directory issue in editor.
 - **Core**: Fix "Go to Definition" functionality.
