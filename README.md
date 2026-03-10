@@ -37,11 +37,15 @@ You can use it by installing specified extension for your editor.
   "lsp": {
     "path-server": {
       "settings": {
+        "basePath": ["${workspaceFolder}", "${document}"],
         "completion": {
-          "maxResults": 5,
-          "showHiddenFiles": false,
-          "exclude": ["**/node_modules/**", "**/.git/**"],
-          "basePath": ["${workspaceFolder}", "${root}"]
+            "maxResults": 0,
+            "showHiddenFiles": true,
+            "exclude": ["**/node_modules", "**/.git", "**/.DS_Store"],
+            "triggerNextCompletion": true
+        },
+        "highlight": {
+            "enable": true
         }
       }
     }

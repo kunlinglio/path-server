@@ -2,9 +2,11 @@ use std::convert::TryFrom;
 use std::fmt::Display;
 use std::path::PathBuf;
 
+use config::{Config as ConfigLoader, File, FileFormat};
 use serde::{Deserialize, Serialize};
 use tower_lsp::lsp_types;
 
+use crate::error::*;
 use crate::logger::*;
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
@@ -115,30 +117,57 @@ impl Display for Config {
 }
 
 pub async fn get(client: &tower_lsp::Client) -> Config {
-    let configs = client
+    let user_configs = client
         .configuration(vec![lsp_types::ConfigurationItem {
             scope_uri: None,
             section: Some("path-server".to_string()),
         }])
         .await;
-    let Ok(configs) = configs else {
-        warn(format!(
-            "Failed to get configuration:{}, use default",
-            configs.unwrap_err()
+    let Ok(user_configs) = user_configs else {
+        error(format!(
+            "Failed to get user configs: {}, use default config",
+            user_configs.unwrap_err()
         ))
         .await;
-        return Default::default();
+        return Config::default();
     };
-    assert!(configs.len() == 1);
-    let Ok(config) = Config::try_from(configs[0].clone()) else {
-        warn(format!(
-            "Failed to parse configuration:{}, use default",
-            configs[0].clone()
+    if user_configs.is_empty() || user_configs[0].is_null() {
+        return Config::default();
+    }
+
+    let merge_res = merge_configs(Config::default(), user_configs);
+    let Ok(config) = merge_res else {
+        error(format!(
+            "Failed to merge configs: {}, use default config",
+            merge_res.unwrap_err()
         ))
         .await;
-        return Default::default();
+        return Config::default();
     };
     config
+}
+
+fn merge_configs(default: Config, user: Vec<serde_json::Value>) -> PathServerResult<Config> {
+    let mut builder = ConfigLoader::builder();
+    let default_json = serde_json::to_string(&default).unwrap();
+    builder = builder.add_source(File::from_str(&default_json, FileFormat::Json));
+
+    let user_json = user[0].to_string();
+    builder = builder.add_source(File::from_str(&user_json, FileFormat::Json));
+
+    match builder.build() {
+        Ok(c) => match c.try_deserialize::<Config>() {
+            Ok(config) => Ok(config),
+            Err(e) => Err(PathServerError::UserConfigError(format!(
+                "Failed to deserialize merged config: {}. Using default.",
+                e
+            ))),
+        },
+        Err(e) => Err(PathServerError::UserConfigError(format!(
+            "Failed to build config: {}. Using default.",
+            e
+        ))),
+    }
 }
 
 #[cfg(test)]
@@ -221,5 +250,36 @@ mod tests {
         let expected: Vec<PathBuf> = vec!["/home/user/foo".into()];
 
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_merge_highlight_partial() {
+        let default = Config::default();
+        let user_json = serde_json::json!({"highlight": {"enable": false}});
+        let res = merge_configs(default.clone(), vec![user_json]);
+        assert!(res.is_ok());
+        let cfg = res.unwrap();
+        assert_eq!(cfg.highlight.enable, false);
+        assert_eq!(cfg.completion, default.completion);
+        assert_eq!(cfg.base_path, default.base_path);
+    }
+
+    #[test]
+    fn test_merge_partial_completion() {
+        let default = Config::default();
+        let user_json = serde_json::json!({
+            "completion": {"max_results": 10, "exclude": ["/tmp"]}
+        });
+        let res = merge_configs(default.clone(), vec![user_json]);
+        assert!(res.is_ok());
+        let cfg = res.unwrap();
+        assert_eq!(cfg.completion.max_results, 10);
+        assert_eq!(cfg.completion.exclude, vec!["/tmp".to_string()]);
+        assert_eq!(cfg.highlight, default.highlight);
+        assert_eq!(
+            cfg.completion.show_hidden_files,
+            default.completion.show_hidden_files
+        );
+        assert_eq!(cfg.base_path, default.base_path);
     }
 }
