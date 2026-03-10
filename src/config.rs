@@ -10,6 +10,7 @@ use crate::error::*;
 use crate::logger::*;
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub struct Config {
     /// Base paths for relative path completion/highlight/jump.
     /// Supports `${workspaceFolder}`, `${document}`, `${userHome}` as placeholders.
@@ -21,6 +22,7 @@ pub struct Config {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub struct Completion {
     /// Max results shown in completion; 0 indicates no limit.
     #[serde(alias = "maxResults")]
@@ -40,6 +42,7 @@ pub struct Completion {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub struct Highlight {
     /// Whether to highlight paths in the editor with underlines.
     pub enable: bool,
@@ -61,12 +64,12 @@ impl Config {
                 }
             } else if path.contains("${document}") {
                 if document_parent.is_some() {
-                    let expanded = path.replace("${document}", document_parent.as_deref().unwrap());
+                    let expanded = path.replace("${document}", document_parent.unwrap());
                     expanded_paths.push(PathBuf::from(expanded));
                 }
             } else if path.contains("${userHome}") {
                 if user_home.is_some() {
-                    let expanded = path.replace("${userHome}", user_home.as_deref().unwrap());
+                    let expanded = path.replace("${userHome}", user_home.unwrap());
                     expanded_paths.push(PathBuf::from(expanded));
                 }
             } else {
@@ -148,25 +151,36 @@ pub async fn get(client: &tower_lsp::Client) -> Config {
 
 fn merge_configs(default: Config, user: Vec<serde_json::Value>) -> PathServerResult<Config> {
     let mut builder = ConfigLoader::builder();
-    let default_json = serde_json::to_string(&default).unwrap();
+    let default_json = clean_json(&serde_json::to_string(&default).unwrap())?;
     builder = builder.add_source(File::from_str(&default_json, FileFormat::Json));
 
-    let user_json = user[0].to_string();
+    let user_json = clean_json(&user[0].to_string())?;
     builder = builder.add_source(File::from_str(&user_json, FileFormat::Json));
 
     match builder.build() {
         Ok(c) => match c.try_deserialize::<Config>() {
             Ok(config) => Ok(config),
             Err(e) => Err(PathServerError::UserConfigError(format!(
-                "Failed to deserialize merged config: {}. Using default.",
+                "Failed to deserialize merged config: {}",
                 e
             ))),
         },
         Err(e) => Err(PathServerError::UserConfigError(format!(
-            "Failed to build config: {}. Using default.",
+            "Failed to build config: {}",
             e
         ))),
     }
+}
+
+/// Clean json format by convert str -> Config
+/// and Config -> str
+fn clean_json(json: &str) -> PathServerResult<String> {
+    let config: Config = serde_json::from_str(json).map_err(|e| {
+        PathServerError::UserConfigError(format!("Failed to parse user config: {}", e))
+    })?;
+    serde_json::to_string_pretty(&config).map_err(|e| {
+        PathServerError::UserConfigError(format!("Failed to clean user config: {}", e))
+    })
 }
 
 #[cfg(test)]
@@ -280,5 +294,15 @@ mod tests {
             default.completion.show_hidden_files
         );
         assert_eq!(cfg.base_path, default.base_path);
+    }
+
+    #[test]
+    fn test_merge_self() {
+        let default = Config::default();
+        let users = serde_json::to_value(&default).unwrap();
+        let res = merge_configs(default.clone(), vec![users]);
+        assert!(res.is_ok());
+        let cfg = res.unwrap();
+        assert_eq!(cfg, default);
     }
 }

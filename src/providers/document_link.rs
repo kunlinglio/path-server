@@ -33,7 +33,7 @@ pub async fn provide_document_links(
                     ))
                 })?,
             ),
-            tooltip: Some("Open file".into()),
+            tooltip: Some(format!("Open file: {}", token.target.display())),
             data: None,
         });
     }

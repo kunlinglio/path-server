@@ -35,7 +35,7 @@ pub async fn provide_definition(
         unreachable!("Expected exactly one token, found {}", current_token.len());
     }
 
-    let current_token = current_token[0].clone();
+    let current_token = current_token[0];
     let Ok(url) = lsp_types::Url::from_file_path(&current_token.target) else {
         warn(format!(
             "Failed to convert path to URL: {}",

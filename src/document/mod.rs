@@ -48,8 +48,8 @@ impl Default for Document {
 impl Document {
     pub fn new(text: String, language_id: &str) -> PathServerResult<Self> {
         let mut doc = Self {
-            text: text.clone(),
             index: LineIndex::new(&text),
+            text,
             language: Language::from_id(language_id),
             tree: None,
             tokens: Arc::new(Mutex::new(None)),

@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use tokio::sync::RwLock;
 use tower_lsp::jsonrpc;
@@ -21,7 +22,7 @@ pub struct PathServer {
     workspace_roots: RwLock<HashSet<PathBuf>>,
     /// file path -> document
     documents: RwLock<HashMap<PathBuf, Document>>,
-    config_cache: RwLock<Option<config::Config>>,
+    config_cache: RwLock<Option<Arc<config::Config>>>,
 }
 
 impl PathServer {
@@ -35,11 +36,11 @@ impl PathServer {
         }
     }
 
-    async fn get_config(&self) -> config::Config {
+    async fn get_config(&self) -> Arc<config::Config> {
         if let Some(cfg) = self.config_cache.read().await.clone() {
             return cfg;
         }
-        let cfg = config::get(&self.client).await;
+        let cfg = Arc::new(config::get(&self.client).await);
         *self.config_cache.write().await = Some(cfg.clone());
         cfg
     }
@@ -50,7 +51,7 @@ impl PathServer {
         }
         // a hacky way to make test config effect - set it into cache
         let mut guard = self.config_cache.write().await;
-        *guard = Some(cfg);
+        *guard = Some(Arc::new(cfg));
     }
 }
 
@@ -131,7 +132,7 @@ impl tower_lsp::LanguageServer for PathServer {
     }
 
     async fn did_change_configuration(&self, _: lsp_types::DidChangeConfigurationParams) {
-        let cfg = config::get(&self.client).await;
+        let cfg = Arc::new(config::get(&self.client).await);
         *self.config_cache.write().await = Some(cfg);
         info(format!(
             "[Config] Configuration changed, update to: {}",
