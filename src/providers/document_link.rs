@@ -10,16 +10,12 @@ use crate::error::*;
 use crate::fs;
 use crate::parser::{PathCandidate, parse_document};
 
-/// Based on document url for now.
 pub async fn provide_document_links(
     doc: &Document,
     doc_path: &Path,
     config: &Config,
     workspace_roots: &HashSet<PathBuf>,
 ) -> PathServerResult<Vec<lsp_types::DocumentLink>> {
-    if !config.highlight.enable {
-        return Ok(vec![]);
-    }
     let tokens: Vec<(PathCandidate, PathBuf)> = future::try_join_all(
         parse_document(doc)
             .into_iter()
@@ -46,7 +42,7 @@ pub async fn provide_document_links(
         links.push(lsp_types::DocumentLink {
             range,
             target: Some(lsp_types::Url::from_file_path(path.clone()).map_err(|_| {
-                PathServerError::Unknown(format!(
+                PathServerError::InvalidPath(format!(
                     "Failed to convert path {} into url",
                     path.display()
                 ))

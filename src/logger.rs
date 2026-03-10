@@ -32,14 +32,14 @@ pub fn debug_sync(message: String) {
     });
 }
 
-pub async fn log(message: String) {
+pub async fn info(message: String) {
     if cfg!(test) {
-        eprintln!("[LOG] {}", message);
+        eprintln!("[INFO] {}", message);
         return;
     }
     if let Some(client) = LSP_CLIENT.get() {
         client
-            .log_message(lsp_types::MessageType::INFO, format!("[LOG] {}", message))
+            .log_message(lsp_types::MessageType::INFO, format!("[INFO] {}", message))
             .await;
     } else {
         panic!("Failed to log: lopper is not initialized!")

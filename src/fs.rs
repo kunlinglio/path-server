@@ -40,7 +40,7 @@ pub fn url_to_path(url: &lsp_types::Url) -> PathServerResult<PathBuf> {
         )));
     }
     url.to_file_path().map_err(|_| {
-        PathServerError::Unknown(format!("Failed to convert URL to file path: {}", url))
+        PathServerError::InvalidPath(format!("Failed to convert URL to file path: {}", url))
     })
 }
 
@@ -50,7 +50,7 @@ pub fn is_hidden_file(path: &Path) -> PathServerResult<bool> {
         .and_then(|name| name.to_str())
         .map(|name| name.starts_with('.'))
     else {
-        return Err(PathServerError::Unknown(format!(
+        return Err(PathServerError::InvalidPath(format!(
             "{} do not contained file name, cannot check hidden or not",
             path.display()
         )));
@@ -69,7 +69,7 @@ pub fn is_hidden_file(path: &Path) -> PathServerResult<bool> {
 
 // pub fn path_to_url(path: &PathBuf) -> PathServerResult<lsp_types::Url> {
 //     lsp_types::Url::from_file_path(path).map_err(|_| {
-//         PathServerError::Unknown(format!(
+//         PathServerError::InvalidPath(format!(
 //             "Failed to convert file path to URL: {}",
 //             path.display()
 //         ))

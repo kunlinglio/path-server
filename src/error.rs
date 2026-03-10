@@ -18,6 +18,9 @@ pub enum PathServerError {
     // code 1003
     #[error("Parse error: {0}")]
     ParseError(String),
+    // code 1004
+    #[error("Invalid path: {0}")]
+    InvalidPath(String),
     // code 2000
     #[error("Unknown error: {0}")]
     Unknown(String),
@@ -44,6 +47,11 @@ impl From<PathServerError> for tower_lsp::jsonrpc::Error {
             PathServerError::ParseError(msg) => jsonrpc::Error {
                 code: jsonrpc::ErrorCode::ServerError(1003),
                 message: std::borrow::Cow::Borrowed("Parse error"),
+                data: Some(Value::String(msg)),
+            },
+            PathServerError::InvalidPath(msg) => jsonrpc::Error {
+                code: jsonrpc::ErrorCode::ServerError(1004),
+                message: std::borrow::Cow::Borrowed("Invalid path"),
                 data: Some(Value::String(msg)),
             },
             PathServerError::Unknown(msg) => jsonrpc::Error {
