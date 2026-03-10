@@ -7,4 +7,4 @@ mod parser;
 mod providers;
 mod server;
 pub use crate::server::PathServer;
-pub use config::{Completion, Config};
+pub use config::{Completion, Config, Highlight};

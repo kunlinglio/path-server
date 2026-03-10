@@ -54,12 +54,12 @@ You can customize Path Server's behavior via your editor's settings.
 
 | Property | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
+| `path-server.basePath` | Array | `["${workspaceFolder}", "${document}"]` | Base paths for relative path completion highlight and jump. You can use `${workspaceFolder}`, `${document}`, and `${userHome}` as placeholders. |
 | `path-server.completion.maxResults` | Number | `0` | Max results shown in completion. `0` indicates no limit. |
 | `path-server.completion.showHiddenFiles` | Boolean | `true` | Whether to show hidden files in completion. |
 | `path-server.completion.exclude` | Array | `["**/node_modules", "**/.git", "**/.DS_Store"]` | List of paths to exclude from completion. Supports glob patterns. |
-| `path-server.completion.basePath` | Array | `["${workspaceFolder}", "${document}"]` | Base paths for relative path completion. You can use `${workspaceFolder}`, `${document}`, and `${userHome}` as placeholders. |
 | `path-server.completion.triggerNextCompletion` | Boolean | `true` | Whether to automatically trigger the next completion after selecting a path. |
-
+| `path-server.highlight.enable` | Boolean | `true` | Whether to highlight paths in the editor with underscore. |
 
 ## Resources
 - [GitHub Repository](https://github.com/kunlinglio/path-server)

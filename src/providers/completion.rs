@@ -21,7 +21,7 @@ pub async fn complete(
     prefix: &str,
     workspace_roots: &HashSet<PathBuf>,
     current_file: &Path,
-    completion_config: &config::Completion,
+    completion_config: &config::Config,
 ) -> PathServerResult<Vec<lsp_types::CompletionItem>> {
     let (base_dir, partial_name) = parser::separate_prefix(prefix);
     debug(format!(
@@ -38,8 +38,8 @@ pub async fn complete(
             &base_dir,
             &partial_name,
             Path::new(""),
-            completion_config.show_hidden_files,
-            completion_config.trigger_next_completion,
+            completion_config.completion.show_hidden_files,
+            completion_config.completion.trigger_next_completion,
         )
         .await?
     } else if base_dir.is_relative() {
@@ -59,8 +59,8 @@ pub async fn complete(
                 &base_dir,
                 &partial_name,
                 base_path,
-                completion_config.show_hidden_files,
-                completion_config.trigger_next_completion,
+                completion_config.completion.show_hidden_files,
+                completion_config.completion.trigger_next_completion,
             )
             .await
         }))
@@ -73,8 +73,8 @@ pub async fn complete(
     };
     Ok(filter(
         completions,
-        completion_config.max_results,
-        &completion_config.exclude,
+        completion_config.completion.max_results,
+        &completion_config.completion.exclude,
     )
     .await)
 }
@@ -239,15 +239,18 @@ mod tests {
         std::fs::create_dir_all(current_file.parent().unwrap()).unwrap();
         std::fs::File::create(&current_file).unwrap();
 
-        let completion_config = crate::config::Completion {
-            max_results: 1,
-            show_hidden_files: true,
-            exclude: vec!["*.log".into()],
+        let config = crate::config::Config {
             base_path: vec!["${workspaceFolder}".into()],
-            trigger_next_completion: true,
+            completion: crate::config::Completion {
+                max_results: 1,
+                show_hidden_files: true,
+                exclude: vec!["*.log".into()],
+                trigger_next_completion: true,
+            },
+            highlight: crate::config::Highlight { enable: true },
         };
 
-        let items = complete("./data/a", &roots, &current_file, &completion_config)
+        let items = complete("./data/a", &roots, &current_file, &config)
             .await
             .unwrap();
 

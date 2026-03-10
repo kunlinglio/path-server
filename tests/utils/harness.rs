@@ -142,4 +142,16 @@ impl TestHarness {
             );
         }
     }
+
+    /// get document links
+    pub async fn document_links(&self, uri: &Url) -> Vec<DocumentLink> {
+        let params = DocumentLinkParams {
+            text_document: TextDocumentIdentifier { uri: uri.clone() },
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default(),
+        };
+
+        let result = self.get_server().document_link(params).await.unwrap();
+        result.unwrap_or_default()
+    }
 }

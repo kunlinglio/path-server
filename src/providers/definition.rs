@@ -1,54 +1,32 @@
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use futures::future;
 use tower_lsp::lsp_types;
 
+use crate::Config;
 use crate::document::Document;
 use crate::error::*;
-use crate::fs;
 use crate::logger::*;
 use crate::parser::{PathCandidate, parse_document};
 
+use super::document_link::filter_exist_path;
+
 /// Based on document url for now.
-/// TODO: support configurable base url
 pub async fn provide_definition(
     doc: &Document,
+    doc_path: &Path,
     line: usize,
     character: usize,
-    doc_path: &Path,
+    config: &Config,
+    workspace_roots: &HashSet<PathBuf>,
 ) -> PathServerResult<Option<lsp_types::GotoDefinitionResponse>> {
     let cursor_offset = doc.utf16_pos_to_offset(line, character)?;
     // gather all string tokens, a very slow implement
     // TODO: optimize performance
     let tokens = future::try_join_all(parse_document(doc).into_iter().map(
         |candidates| async move {
-            for candidate in candidates {
-                let path = PathBuf::from(&candidate.content);
-                if path.is_absolute() {
-                    if fs::exists(&path).await {
-                        return PathServerResult::Ok(Some((
-                            candidate,
-                            tokio::fs::canonicalize(path).await?,
-                        )));
-                    }
-                } else if path.is_relative() {
-                    let Some(base_path) = doc_path.parent() else {
-                        warn(format!(
-                            "Failed to get parent directory of {}, give up provide document links.",
-                            doc_path.display()
-                        ))
-                        .await;
-                        continue;
-                    };
-                    let full_path = base_path.join(&path);
-                    if fs::exists(&full_path).await {
-                        return Ok(Some((candidate, tokio::fs::canonicalize(full_path).await?)));
-                    }
-                } else {
-                    unreachable!();
-                }
-            }
-            Ok(None)
+            filter_exist_path(candidates, config, workspace_roots, doc_path).await
         },
     ))
     .await?
@@ -90,6 +68,7 @@ pub async fn provide_definition(
 mod tests {
     use super::*;
     use crate::document::Language;
+    use std::collections::HashSet;
     use std::fs;
     use tempfile::tempdir;
     use tokio;
@@ -111,9 +90,16 @@ mod tests {
         let start_offset = text.find(&target.display().to_string()).unwrap();
         let (line, character) = doc.offset_to_utf16_pos(start_offset).unwrap();
 
-        let res = provide_definition(&doc, line, character + 1, &current_file)
-            .await
-            .unwrap();
+        let res = provide_definition(
+            &doc,
+            &current_file,
+            line,
+            character + 1,
+            &Config::default(),
+            &HashSet::new(),
+        )
+        .await
+        .unwrap();
         assert!(res.is_some());
         match res.unwrap() {
             lsp_types::GotoDefinitionResponse::Scalar(loc) => {
@@ -150,9 +136,16 @@ mod tests {
         let start_offset = text.find(rel_path).unwrap();
         let (line, character) = doc.offset_to_utf16_pos(start_offset).unwrap();
 
-        let res = provide_definition(&doc, line, character + 1, &current_file)
-            .await
-            .unwrap();
+        let res = provide_definition(
+            &doc,
+            &current_file,
+            line,
+            character + 1,
+            &Config::default(),
+            &HashSet::new(),
+        )
+        .await
+        .unwrap();
         assert!(res.is_some());
         match res.unwrap() {
             lsp_types::GotoDefinitionResponse::Scalar(loc) => {

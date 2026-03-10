@@ -1,44 +1,30 @@
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use futures::future;
 use tower_lsp::lsp_types;
 
+use crate::config::Config;
 use crate::document::Document;
 use crate::error::*;
 use crate::fs;
-use crate::logger::*;
 use crate::parser::{PathCandidate, parse_document};
 
 /// Based on document url for now.
-/// TODO: support configurable base url
 pub async fn provide_document_links(
     doc: &Document,
     doc_path: &Path,
+    config: &Config,
+    workspace_roots: &HashSet<PathBuf>,
 ) -> PathServerResult<Vec<lsp_types::DocumentLink>> {
+    if !config.highlight.enable {
+        return Ok(vec![]);
+    }
     let tokens: Vec<(PathCandidate, PathBuf)> = future::try_join_all(
         parse_document(doc)
             .into_iter()
             .map(|candidates| async move {
-                for candidate in candidates {
-                    let path = PathBuf::from(&candidate.content);
-                    if path.is_absolute() {
-                        if fs::exists(&path).await {
-                            return PathServerResult::Ok(Some((candidate, tokio::fs::canonicalize(path).await?)));
-                        }
-                    } else if path.is_relative() {
-                        let Some(base_path) = doc_path.parent() else {
-                            warn(format!("Failed to get parent directory of {}, give up provide document links.", doc_path.display())).await;
-                            continue;
-                        };
-                        let full_path = base_path.join(&path);
-                        if fs::exists(&full_path).await {
-                            return Ok(Some((candidate, tokio::fs::canonicalize(&full_path).await?)));
-                        }
-                    } else {
-                        unreachable!();
-                    }
-                }
-                Ok(None)
+                filter_exist_path(candidates, config, workspace_roots, doc_path).await
             }),
     )
     .await?
@@ -73,10 +59,53 @@ pub async fn provide_document_links(
     Ok(links)
 }
 
+pub async fn filter_exist_path(
+    candidates: Vec<PathCandidate>,
+    config: &Config,
+    workspace_roots: &HashSet<PathBuf>,
+    current_file: &Path,
+) -> PathServerResult<Option<(PathCandidate, PathBuf)>> {
+    for candidate in candidates {
+        let path = PathBuf::from(&candidate.content);
+        if path.is_absolute() {
+            if fs::exists(&path).await {
+                return PathServerResult::Ok(Some((
+                    candidate,
+                    tokio::fs::canonicalize(path).await?,
+                )));
+            }
+        } else if path.is_relative() {
+            let workspace_folders = workspace_roots
+                .iter()
+                .map(|p| p.to_string_lossy().into_owned())
+                .collect::<Vec<_>>();
+            let parent = current_file
+                .parent()
+                .map(|p| p.to_string_lossy().into_owned());
+            // TODO: optimize env syscall frequency
+            let home = std::env::var("HOME").ok();
+            for base_path in config.base_paths(&workspace_folders, &parent, &home) {
+                let full_path = base_path.join(&path);
+                if fs::exists(&full_path).await {
+                    return PathServerResult::Ok(Some((
+                        candidate,
+                        tokio::fs::canonicalize(&full_path).await?,
+                    )));
+                }
+            }
+        } else {
+            unreachable!();
+        }
+    }
+    Ok(None)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Config;
     use crate::document::Language;
+    use std::collections::HashSet;
     use std::fs;
     use tempfile::tempdir;
     use tokio;
@@ -94,7 +123,10 @@ mod tests {
         let text = format!("let s = \"{}\";\n", target.display());
         let doc = Document::new(text.clone(), &Language::rust.to_string()).unwrap();
 
-        let links = provide_document_links(&doc, &current_file).await.unwrap();
+        let links =
+            provide_document_links(&doc, &current_file, &Config::default(), &HashSet::new())
+                .await
+                .unwrap();
         assert_eq!(links.len(), 1);
         let url = links[0].target.as_ref().unwrap();
         assert_eq!(
@@ -121,7 +153,10 @@ mod tests {
         let text = format!("let s = \"{}\";\n", rel_path);
         let doc = Document::new(text.clone(), &Language::rust.to_string()).unwrap();
 
-        let links = provide_document_links(&doc, &current_file).await.unwrap();
+        let links =
+            provide_document_links(&doc, &current_file, &Config::default(), &HashSet::new())
+                .await
+                .unwrap();
         assert_eq!(links.len(), 1);
         let url = links[0].target.as_ref().unwrap();
         let expected = tokio::fs::canonicalize(&target).await.unwrap();

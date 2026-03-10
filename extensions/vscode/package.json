@@ -37,51 +37,54 @@
         "command": "path-server.restartServer"
       }
     ],
-    "configuration": [
-      {
-        "title": "Path Server: Completion",
-        "properties": {
-          "path-server.completion.maxResults": {
-            "type": "number",
-            "default": 0,
-            "description": "Max results shown in completion. 0 indicates no limit."
+    "configuration": {
+      "title": "Path Server",
+      "properties": {
+        "path-server.basePath": {
+          "type": "array",
+          "items": {
+            "type": "string"
           },
-          "path-server.completion.showHiddenFiles": {
-            "type": "boolean",
-            "default": true,
-            "description": "Whether to show hidden files in completion."
+          "default": [
+            "${workspaceFolder}",
+            "${document}"
+          ],
+          "description": "Base paths for relative path completion, highlight and jump. Supports `${workspaceFolder}`, `${document}`, `${userHome}` as placeholders."
+        },
+        "path-server.completion.maxResults": {
+          "type": "number",
+          "default": 0,
+          "description": "Max results shown in completion. 0 indicates no limit."
+        },
+        "path-server.completion.showHiddenFiles": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to show hidden files in completion."
+        },
+        "path-server.completion.exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
           },
-          "path-server.completion.exclude": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "default": [
-              "**/node_modules",
-              "**/.git",
-              "**/.DS_Store"
-            ],
-            "description": "List of paths to exclude from completion. Supports glob patterns."
-          },
-          "path-server.completion.basePath": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "default": [
-              "${workspaceFolder}",
-              "${document}"
-            ],
-            "description": "Base paths for relative path completion. Supports `${workspaceFolder}`, `${document}`, `${userHome}` as placeholders."
-          },
-          "path-server.completion.triggerNextCompletion": {
-            "type": "boolean",
-            "default": true,
-            "description": "Whether to automatically trigger next completion after selecting an item."
-          }
+          "default": [
+            "**/node_modules",
+            "**/.git",
+            "**/.DS_Store"
+          ],
+          "description": "List of paths to exclude from completion. Supports glob patterns."
+        },
+        "path-server.completion.triggerNextCompletion": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to automatically trigger next completion after selecting an item."
+        },
+        "path-server.highlight.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether highlight paths in the editor with underscore."
         }
       }
-    ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
