@@ -21,12 +21,6 @@ export async function activate(context: vscode.ExtensionContext) {
 
     const serverOutputChannel = vscode.window.createOutputChannel("Path Server Language Server", { log: true });
     disposables.push(serverOutputChannel);
-    let traceChannel: vscode.OutputChannel | undefined = undefined;
-    if (debugMode) {
-        traceChannel = vscode.window.createOutputChannel("Path Server Language Server Trace");
-        traceChannel.appendLine("Debug mode enabled.");
-        disposables.push(traceChannel);
-    }
 
     const serverPath = binaryPath(context);
     const serverExecutable: languageClient.Executable = {
@@ -42,10 +36,12 @@ export async function activate(context: vscode.ExtensionContext) {
             { scheme: 'untitled', language: '*' }
         ],
         outputChannel: serverOutputChannel,
-        traceOutputChannel: traceChannel,
         synchronize: {
             configurationSection: 'path-server'
-        }
+        },
+        initializationOptions: {
+            editor: "VSCode",
+        },
     };
 
     client = new languageClient.LanguageClient(

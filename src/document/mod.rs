@@ -8,7 +8,7 @@ use tree_sitter::Tree;
 
 use crate::error::*;
 use crate::parser::{new_tree, update_tree};
-use crate::resolver::PathTokenCache;
+use crate::resolver::ResolvedPathCache;
 
 #[derive(Debug)]
 pub struct Document {
@@ -17,7 +17,7 @@ pub struct Document {
     /// Language if from lsp client
     pub language: Language,
     /// Tokens cache
-    pub tokens: Mutex<PathTokenCache>,
+    pub tokens: Mutex<ResolvedPathCache>,
     /// Index for line/column -> offset calculations
     index: LineIndex,
     /// Tree-sitter AST tree for incremental parsing
@@ -31,7 +31,7 @@ impl Default for Document {
             index: LineIndex::new(""),
             language: Language::Unknown("".into()),
             tree: None,
-            tokens: Mutex::new(PathTokenCache::new()),
+            tokens: Mutex::new(ResolvedPathCache::new()),
         }
     }
 }
@@ -43,7 +43,7 @@ impl Document {
             text,
             language: Language::from_id(language_id),
             tree: None,
-            tokens: Mutex::new(PathTokenCache::new()),
+            tokens: Mutex::new(ResolvedPathCache::new()),
         };
         doc.tree = new_tree(&doc)?;
         Ok(doc)
@@ -74,7 +74,7 @@ impl Document {
             index: new_index,
             tree: None,
             language: old_document.language.clone(),
-            tokens: Mutex::new(PathTokenCache::new()),
+            tokens: Mutex::new(ResolvedPathCache::new()),
         };
 
         // update tree

@@ -2,10 +2,11 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use tower_lsp::lsp_types;
 
+use crate::client::get_client;
 use crate::config::Config;
 use crate::document::Document;
 use crate::error::*;
-use crate::resolver::get_or_resolve_tokens;
+use crate::resolver::resolve_all;
 
 pub async fn provide_document_links(
     doc: &Document,
@@ -13,7 +14,10 @@ pub async fn provide_document_links(
     config: &Config,
     workspace_roots: &HashSet<PathBuf>,
 ) -> PathServerResult<Vec<lsp_types::DocumentLink>> {
-    let tokens = get_or_resolve_tokens(doc, config, workspace_roots, doc_path).await?;
+    let client = get_client().await;
+    assert!(client.support_document_link);
+    assert!(config.highlight.enable); // these should be checked by server
+    let tokens = resolve_all(doc, config, workspace_roots, doc_path).await?;
     let filtered = tokens
         .iter()
         .filter(|t| config.highlight.highlight_directory || !t.is_dir);

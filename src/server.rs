@@ -6,6 +6,7 @@ use tokio::sync::RwLock;
 use tower_lsp::jsonrpc;
 use tower_lsp::lsp_types;
 
+use crate::client::{ClientMetadata, Editor, get_client, set_client};
 use crate::config;
 use crate::document::Document;
 use crate::error::*;
@@ -46,12 +47,36 @@ impl PathServer {
     }
 
     pub async fn set_test_config(&self, cfg: config::Config) {
-        // if !cfg!(debug_assertions) && !cfg!(test) {
-        //     panic!("Test configuration can only be set in debug mode, ignore it");
-        // }
         // a hacky way to make test config effect - set it into cache
         let mut guard = self.config_cache.write().await;
         *guard = Some(Arc::new(cfg));
+    }
+
+    pub fn parse_editor_env(&self, params: &lsp_types::InitializeParams) -> Editor {
+        let Some(options) = &params.initialization_options else {
+            return Editor::Unknown("unknown".into());
+        };
+        let Some(editor) = options.get("editor") else {
+            return Editor::Unknown("unknown".into());
+        };
+        if let Some(editor_str) = editor.as_str() {
+            return Editor::from(editor_str);
+        }
+        Editor::Unknown("unknown".into())
+    }
+
+    pub fn parse_client_env(&self, params: &lsp_types::InitializeParams) -> ClientMetadata {
+        let editor = self.parse_editor_env(params);
+        let support_document_link = params
+            .capabilities
+            .text_document
+            .as_ref()
+            .and_then(|td| td.document_link.clone())
+            .is_some();
+        ClientMetadata {
+            editor,
+            support_document_link,
+        }
     }
 }
 
@@ -61,6 +86,10 @@ impl tower_lsp::LanguageServer for PathServer {
         &self,
         params: lsp_types::InitializeParams,
     ) -> jsonrpc::Result<lsp_types::InitializeResult> {
+        // set editor env
+        let client_env = self.parse_client_env(&params);
+        info(format!("Client Env: {}", client_env)).await;
+        set_client(client_env).await;
         // for backward compatibility
         if let Some(uri) = params.root_uri {
             let root = url_to_path(&uri).map_err(|e| {
@@ -105,6 +134,8 @@ impl tower_lsp::LanguageServer for PathServer {
                 }),
                 // for path jumping
                 definition_provider: Some(lsp_types::OneOf::Left(true)),
+                // for hover hint
+                hover_provider: Some(lsp_types::HoverProviderCapability::Simple(true)),
                 // detectors
                 text_document_sync: Some(lsp_types::TextDocumentSyncCapability::Kind(
                     lsp_types::TextDocumentSyncKind::INCREMENTAL,
@@ -298,7 +329,7 @@ impl tower_lsp::LanguageServer for PathServer {
             })?;
         let workspace_roots = self.workspace_roots.read().await;
         let completions =
-            providers::complete(&raw_path, &workspace_roots, &file_path, &config).await?;
+            providers::provide_completion(&raw_path, &workspace_roots, &file_path, &config).await?;
         info(format!(
             "[Completion] Generated {} completions",
             completions.len()
@@ -320,6 +351,11 @@ impl tower_lsp::LanguageServer for PathServer {
         params: lsp_types::DocumentLinkParams,
     ) -> jsonrpc::Result<Option<Vec<lsp_types::DocumentLink>>> {
         let config = self.get_config().await;
+        let client = get_client().await;
+        if !client.support_document_link {
+            info("[Document Lint] Client does not support document link".into()).await;
+            return Ok(None);
+        };
         if !config.highlight.enable {
             info("[Document Link] Highlighting is disabled".into()).await;
             return Ok(None);
@@ -414,5 +450,55 @@ impl tower_lsp::LanguageServer for PathServer {
             info("[Goto Definition] No definition found".into()).await;
         }
         Ok(definition)
+    }
+
+    async fn hover(
+        &self,
+        params: lsp_types::HoverParams,
+    ) -> jsonrpc::Result<Option<lsp_types::Hover>> {
+        info(format!(
+            "[Hover] Processing hover request for: {} {}:{}",
+            params.text_document_position_params.text_document.uri,
+            params.text_document_position_params.position.line,
+            params.text_document_position_params.position.character
+        ))
+        .await;
+        let client = get_client().await;
+        let config = self.get_config().await;
+        if client.support_document_link && config.highlight.enable {
+            info("[Hover] Client support document link and highlight is enabled, provide nothing to avoid duplicated hover item".into()).await;
+            return Ok(None);
+        };
+        let line = params.text_document_position_params.position.line as usize;
+        let character = params.text_document_position_params.position.character as usize;
+        let path =
+            url_to_path(&params.text_document_position_params.text_document.uri).map_err(|e| {
+                PathServerError::InvalidPath(format!(
+                    "Failed to convert document URI to file path: {}, error: {}",
+                    params.text_document_position_params.text_document.uri, e
+                ))
+            })?;
+        let documents = self.documents.read().await;
+        let doc = documents
+            .get(&path)
+            .ok_or(PathServerError::Unknown(format!(
+                "Document {} not found, please open it before providing goto definition",
+                path.display()
+            )))?;
+        let workspace_roots = self.workspace_roots.read().await;
+
+        let hover =
+            providers::provide_hover(doc, &path, line, character, &config, &workspace_roots)
+                .await?;
+        if let Some(hover) = &hover {
+            info(format!(
+                "[Hover] Generated hover content: {:?}",
+                hover.contents
+            ))
+            .await;
+        } else {
+            info("[Hover] No hover content found".into()).await;
+        };
+        Ok(hover)
     }
 }

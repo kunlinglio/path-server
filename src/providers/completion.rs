@@ -17,7 +17,7 @@ struct CompletionItemInner {
     full_path: PathBuf,
 }
 
-pub async fn complete(
+pub async fn provide_completion(
     prefix: &str,
     workspace_roots: &HashSet<PathBuf>,
     current_file: &Path,
@@ -254,7 +254,7 @@ mod tests {
             },
         };
 
-        let items = complete("./data/a", &roots, &current_file, &config)
+        let items = provide_completion("./data/a", &roots, &current_file, &config)
             .await
             .unwrap();
 

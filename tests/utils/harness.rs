@@ -30,14 +30,62 @@ impl TestHarness {
         };
 
         // initialize language server
-        harness
-            .get_server()
-            .initialize(InitializeParams {
-                root_uri: Some(root_uri),
+        let init_params = InitializeParams {
+            root_uri: Some(root_uri.clone()),
+            capabilities: ClientCapabilities {
+                text_document: Some(TextDocumentClientCapabilities {
+                    document_link: Some(DocumentLinkClientCapabilities {
+                        dynamic_registration: Some(false),
+                        tooltip_support: Some(true),
+                    }),
+                    ..Default::default()
+                }),
                 ..Default::default()
-            })
-            .await
-            .unwrap();
+            },
+            ..Default::default()
+        };
+        harness.get_server().initialize(init_params).await.unwrap();
+        harness
+    }
+
+    /// create workspace and init language server with configurable documentLink support
+    pub async fn new_with_document_link(support: bool) -> Self {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let root_path = temp_dir.path().to_path_buf();
+        let root_uri = Url::from_directory_path(&root_path).unwrap();
+
+        let (service, _) = LspService::new(|client| PathServer::new(client));
+        let harness = Self {
+            _temp_dir: temp_dir,
+            root_uri: root_uri.clone(),
+            root_path,
+            service: Some(service),
+        };
+
+        let init_params = if support {
+            InitializeParams {
+                root_uri: Some(root_uri.clone()),
+                capabilities: ClientCapabilities {
+                    text_document: Some(TextDocumentClientCapabilities {
+                        document_link: Some(DocumentLinkClientCapabilities {
+                            dynamic_registration: Some(false),
+                            tooltip_support: Some(true),
+                        }),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+                ..Default::default()
+            }
+        } else {
+            InitializeParams {
+                root_uri: Some(root_uri.clone()),
+                capabilities: ClientCapabilities::default(),
+                ..Default::default()
+            }
+        };
+
+        harness.get_server().initialize(init_params).await.unwrap();
         harness
     }
 

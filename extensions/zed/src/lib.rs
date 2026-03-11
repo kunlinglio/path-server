@@ -235,6 +235,16 @@ impl zed::Extension for PathServerExtension {
         })
     }
 
+    fn language_server_initialization_options(
+        &mut self,
+        _language_server_id: &zed_extension_api::LanguageServerId,
+        _worktree: &zed_extension_api::Worktree,
+    ) -> zed_extension_api::Result<Option<serde_json::Value>> {
+        Ok(Some(serde_json::json!({
+            "editor": "Zed"
+        })))
+    }
+
     fn language_server_workspace_configuration(
         &mut self,
         _server_id: &zed::LanguageServerId,

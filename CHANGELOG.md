@@ -2,6 +2,10 @@
 
 All notable changes to the Path Server will be documented in this file.
 
+## [Unreleased]
+### Added
+- **Core**: Support to provide hover information on paths.
+
 ## [0.5.0] - 2026-03-11
 ### Added
 - **VS Code**: Included `CHANGELOG.md` inside package.

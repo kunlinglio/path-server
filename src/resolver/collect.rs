@@ -11,7 +11,7 @@ use crate::fs;
 use crate::parser::{PathCandidate, parse_document};
 
 #[derive(Debug, Clone)]
-pub struct PathToken {
+pub struct ResolvedPath {
     pub start: (usize, usize), // (line, character) in utf16
     pub end: (usize, usize),   // (line, character) in utf16
     pub target: PathBuf,
@@ -19,12 +19,12 @@ pub struct PathToken {
 }
 
 #[derive(Debug)]
-pub struct PathTokenCache {
-    tokens: Option<Arc<Vec<PathToken>>>,
+pub struct ResolvedPathCache {
+    tokens: Option<Arc<Vec<ResolvedPath>>>,
     config_signature: String,
 }
 
-impl PathTokenCache {
+impl ResolvedPathCache {
     pub fn new() -> Self {
         Self {
             tokens: None,
@@ -33,12 +33,12 @@ impl PathTokenCache {
     }
 }
 
-pub async fn get_or_resolve_tokens(
+pub async fn resolve_all(
     document: &Document,
     config: &Config,
     workspace_roots: &HashSet<PathBuf>,
     doc_path: &Path,
-) -> PathServerResult<Arc<Vec<PathToken>>> {
+) -> PathServerResult<Arc<Vec<ResolvedPath>>> {
     let mut cache = document.tokens.lock().await;
     let signature = config.signature()?;
     if let Some(tokens) = &cache.tokens
@@ -50,7 +50,7 @@ pub async fn get_or_resolve_tokens(
     // miss
     let tokens = compute_tokens(document, config, workspace_roots, doc_path).await?;
     let shared_tokens = Arc::new(tokens);
-    *cache = PathTokenCache {
+    *cache = ResolvedPathCache {
         tokens: Some(Arc::clone(&shared_tokens)),
         config_signature: signature,
     };
@@ -62,14 +62,14 @@ async fn compute_tokens(
     config: &Config,
     workspace_roots: &HashSet<PathBuf>,
     doc_path: &Path,
-) -> PathServerResult<Vec<PathToken>> {
+) -> PathServerResult<Vec<ResolvedPath>> {
     let workspace_roots = workspace_roots
         .iter()
         .map(|p| p.to_string_lossy().into_owned())
         .collect::<Vec<_>>();
     let parent = doc_path.parent().map(|p| p.to_string_lossy().into_owned());
     let home = std::env::var("HOME").ok();
-    let tokens: Vec<PathToken> = future::try_join_all(parse_document(document).into_iter().map(
+    let tokens: Vec<ResolvedPath> = future::try_join_all(parse_document(document).into_iter().map(
         |candidates| async {
             filter_exist_path(
                 candidates,
@@ -96,7 +96,7 @@ async fn filter_exist_path(
     parent: Option<&String>,
     home: Option<&String>,
     document: &Document,
-) -> PathServerResult<Option<PathToken>> {
+) -> PathServerResult<Option<ResolvedPath>> {
     for candidate in candidates {
         let path = PathBuf::from(&candidate.content);
         if path.is_absolute() {
@@ -125,10 +125,10 @@ async fn candidate_to_token(
     candidate: &PathCandidate,
     path: &PathBuf,
     document: &Document,
-) -> PathServerResult<PathToken> {
+) -> PathServerResult<ResolvedPath> {
     let start = document.offset_to_utf16_pos(candidate.start_byte)?;
     let end = document.offset_to_utf16_pos(candidate.end_byte)?;
-    Ok(PathToken {
+    Ok(ResolvedPath {
         start,
         end,
         target: tokio::fs::canonicalize(&path).await?,
