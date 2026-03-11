@@ -65,5 +65,8 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Run Tests
+      - name: Run tests in debug mode
         run: cargo test
+
+      - name: Run tests in release mode
+        run: cargo test --release

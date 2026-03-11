@@ -69,20 +69,24 @@ pub async fn provide_definition(
 fn cursor_inside(cursor_line: usize, cursor_character: usize, token: &PathToken) -> bool {
     let (start_line, start_character) = token.start;
     let (end_line, end_character) = token.end;
-    if cursor_line > start_line || cursor_line < end_line {
+    if cursor_line < start_line || cursor_line > end_line {
+        // quick path: cursor do not in the token lines
         return false;
     };
-    if cursor_line < start_line && cursor_line > end_line {
-        return true;
+    if start_line == end_line {
+        // single line token, most frequent case
+        return start_line == cursor_line
+            && cursor_character >= start_character
+            && cursor_character < end_character;
     };
-    // cursor is in the same line of start or end
+    // multi-line token
     if cursor_line == start_line {
-        cursor_character >= start_character
-    } else if cursor_line == end_line {
-        cursor_character < end_character
-    } else {
-        unreachable!();
+        return cursor_character >= start_character;
     }
+    if cursor_line == end_line {
+        return cursor_character < end_character;
+    }
+    true
 }
 
 #[cfg(test)]

@@ -46,9 +46,9 @@ impl PathServer {
     }
 
     pub async fn set_test_config(&self, cfg: config::Config) {
-        if !cfg!(debug_assertions) {
-            panic!("Test configuration can only be set in debug mode, ignore it");
-        }
+        // if !cfg!(debug_assertions) && !cfg!(test) {
+        //     panic!("Test configuration can only be set in debug mode, ignore it");
+        // }
         // a hacky way to make test config effect - set it into cache
         let mut guard = self.config_cache.write().await;
         *guard = Some(Arc::new(cfg));
