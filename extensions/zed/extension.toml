@@ -1,6 +1,6 @@
 id = "path-server"
 name = "Path Server"
-version = "0.4.0"
+version = "0.5.0"
 schema_version = 1
 authors = ["kunlinglio"]
 description = "Path Intellisense like extension for zed, provides fast, real-time file path auto-completion in any language, powered by Path Server."
