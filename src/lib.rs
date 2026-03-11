@@ -5,6 +5,7 @@ mod fs;
 mod logger;
 mod parser;
 mod providers;
+mod resolver;
 mod server;
 pub use crate::server::PathServer;
 pub use config::{Completion, Config, Highlight};

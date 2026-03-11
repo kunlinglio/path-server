@@ -156,7 +156,7 @@ impl tower_lsp::LanguageServer for PathServer {
                     root_result.unwrap_err()
                 ))
                 .await;
-                return;
+                continue;
             };
             roots.insert(root);
         }

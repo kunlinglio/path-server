@@ -8,6 +8,7 @@ repository = "https://github.com/kunlinglio/path-server"
 readme = "README.md"
 
 [dependencies]
+blake3 = "1.8.3"
 config = "0.15.19"
 futures = "0.3.32"
 globset = "0.4.18"

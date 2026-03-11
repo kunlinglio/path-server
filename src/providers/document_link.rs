@@ -5,8 +5,7 @@ use tower_lsp::lsp_types;
 use crate::config::Config;
 use crate::document::Document;
 use crate::error::*;
-
-use super::compute_tokens::get_or_compute_tokens;
+use crate::resolver::get_or_resolve_tokens;
 
 pub async fn provide_document_links(
     doc: &Document,
@@ -14,7 +13,7 @@ pub async fn provide_document_links(
     config: &Config,
     workspace_roots: &HashSet<PathBuf>,
 ) -> PathServerResult<Vec<lsp_types::DocumentLink>> {
-    let tokens = get_or_compute_tokens(doc, config, workspace_roots, doc_path).await?;
+    let tokens = get_or_resolve_tokens(doc, config, workspace_roots, doc_path).await?;
     let filtered = tokens
         .iter()
         .filter(|t| config.highlight.highlight_directory || !t.is_dir);

@@ -333,3 +333,141 @@ async fn test_config_highlight_directory() {
         "Document links should be empty for directories when highlight_directory is false"
     );
 }
+
+#[tokio::test]
+async fn test_dynamic_update_document_links() {
+    let harness = TestHarness::new().await;
+
+    harness.create_file("existing_file.txt");
+    harness.create_file("src/main.rs");
+
+    let content = "let p = \"./existing_file.txt\"";
+    let uri = harness.open_doc("src/main.rs", content).await;
+
+    // initial: highlight enabled (default) -> links present
+    let links_before = harness.document_links(&uri).await;
+    assert!(
+        !links_before.is_empty(),
+        "expected links before config change"
+    );
+
+    // turn off highlight at runtime
+    let cfg = Config {
+        base_path: vec!["${workspaceFolder}".into()],
+        completion: Completion {
+            max_results: 0,
+            show_hidden_files: true,
+            exclude: vec![],
+            trigger_next_completion: true,
+        },
+        highlight: Highlight {
+            enable: false,
+            highlight_directory: true,
+        },
+    };
+    harness.set_config(cfg).await;
+
+    // after change -> links should reflect new config (empty)
+    let links_after = harness.document_links(&uri).await;
+    assert!(
+        links_after.is_empty(),
+        "expected no links after disabling highlight"
+    );
+}
+
+#[tokio::test]
+async fn test_dynamic_update_base_path_affects_document_links() {
+    let harness = TestHarness::new().await;
+
+    // file lives under alt/
+    harness.create_file("alt/existing_file.txt");
+    harness.create_file("src/main.rs");
+
+    let content = "let p = \"./existing_file.txt\"";
+    let uri = harness.open_doc("src/main.rs", content).await;
+
+    // initial config: base_path = workspace root -> should NOT find alt/existing_file.txt
+    let cfg_initial = Config {
+        base_path: vec!["${workspaceFolder}".into()],
+        completion: Completion {
+            max_results: 0,
+            show_hidden_files: true,
+            exclude: vec![],
+            trigger_next_completion: true,
+        },
+        highlight: Highlight {
+            enable: true,
+            highlight_directory: true,
+        },
+    };
+    harness.set_config(cfg_initial).await;
+
+    let links_before = harness.document_links(&uri).await;
+    assert!(
+        links_before.is_empty(),
+        "expected no links before adding alt to base_path"
+    );
+
+    // update config: include ${workspaceFolder}/alt -> should produce document link
+    let cfg_updated = Config {
+        base_path: vec!["${workspaceFolder}/alt".into()],
+        completion: Completion {
+            max_results: 0,
+            show_hidden_files: true,
+            exclude: vec![],
+            trigger_next_completion: true,
+        },
+        highlight: Highlight {
+            enable: true,
+            highlight_directory: true,
+        },
+    };
+    harness.set_config(cfg_updated).await;
+
+    let links_after = harness.document_links(&uri).await;
+    assert!(
+        !links_after.is_empty(),
+        "expected links after updating base_path to include alt"
+    );
+}
+
+#[tokio::test]
+async fn test_dynamic_update_completion() {
+    let harness = TestHarness::new().await;
+
+    harness.create_file("hidden_dir/.secret.txt");
+    harness.create_file("src/main.rs");
+
+    let content = "let p = \"./hidden_dir/.";
+    let uri = harness.open_doc("src/main.rs", content).await;
+
+    // initial: show_hidden_files = true (default) -> secret file shown
+    let items_before = harness
+        .completion_items(&uri, 0, content.len() as u32)
+        .await;
+    let labels_before: Vec<String> = items_before.into_iter().map(|i| i.label).collect();
+    assert!(labels_before.contains(&".secret.txt".to_string()));
+
+    // update config: hide hidden files
+    let cfg = Config {
+        base_path: vec!["${workspaceFolder}".into()],
+        completion: Completion {
+            max_results: 0,
+            show_hidden_files: false,
+            exclude: vec![],
+            trigger_next_completion: true,
+        },
+        highlight: Highlight {
+            enable: true,
+            highlight_directory: true,
+        },
+    };
+    harness.set_config(cfg).await;
+
+    // after change -> completion should no longer include hidden file
+    let items_after = harness
+        .completion_items(&uri, 0, content.len() as u32)
+        .await;
+    let labels_after: Vec<String> = items_after.into_iter().map(|i| i.label).collect();
+    assert!(!labels_after.contains(&".secret.txt".to_string()));
+}

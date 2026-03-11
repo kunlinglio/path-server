@@ -1,5 +1,4 @@
 mod completion;
-mod compute_tokens;
 mod definition;
 mod document_link;
 

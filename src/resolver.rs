@@ -6,26 +6,54 @@ use futures::future;
 
 use crate::config::Config;
 use crate::document::Document;
-use crate::document::PathToken;
 use crate::error::*;
 use crate::fs;
 use crate::parser::{PathCandidate, parse_document};
 
-pub async fn get_or_compute_tokens(
+#[derive(Debug, Clone)]
+pub struct PathToken {
+    pub start: (usize, usize), // (line, character) in utf16
+    pub end: (usize, usize),   // (line, character) in utf16
+    pub target: PathBuf,
+    pub is_dir: bool,
+}
+
+#[derive(Debug)]
+pub struct PathTokenCache {
+    tokens: Option<Arc<Vec<PathToken>>>,
+    config_signature: String,
+}
+
+impl PathTokenCache {
+    pub fn new() -> Self {
+        Self {
+            tokens: None,
+            config_signature: String::new(),
+        }
+    }
+}
+
+pub async fn get_or_resolve_tokens(
     document: &Document,
     config: &Config,
     workspace_roots: &HashSet<PathBuf>,
     doc_path: &Path,
 ) -> PathServerResult<Arc<Vec<PathToken>>> {
-    let mut tokens_guard = document.tokens.lock().await;
-    if let Some(tokens) = &*tokens_guard {
+    let mut cache = document.tokens.lock().await;
+    let signature = config.signature()?;
+    if let Some(tokens) = &cache.tokens
+        && cache.config_signature == signature
+    {
         // hit
         return Ok(tokens.clone());
     }
     // miss
     let tokens = compute_tokens(document, config, workspace_roots, doc_path).await?;
     let shared_tokens = Arc::new(tokens);
-    *tokens_guard = Some(Arc::clone(&shared_tokens));
+    *cache = PathTokenCache {
+        tokens: Some(Arc::clone(&shared_tokens)),
+        config_signature: signature,
+    };
     Ok(shared_tokens)
 }
 

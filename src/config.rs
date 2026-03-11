@@ -95,6 +95,16 @@ impl Config {
             .flatten()
             .collect()
     }
+
+    pub fn signature(&self) -> PathServerResult<String> {
+        let bytes = serde_json::to_vec(self).map_err(|e| {
+            PathServerError::Unknown(format!(
+                "Failed to calculate config signature, failed to serialize config: {}",
+                e
+            ))
+        })?;
+        Ok(blake3::hash(&bytes).to_hex().to_string())
+    }
 }
 
 impl Default for Config {

@@ -5,11 +5,10 @@ use tower_lsp::lsp_types;
 
 use crate::Config;
 use crate::document::Document;
-use crate::document::PathToken;
 use crate::error::*;
 use crate::logger::*;
-
-use super::compute_tokens::get_or_compute_tokens;
+use crate::resolver::PathToken;
+use crate::resolver::get_or_resolve_tokens;
 
 pub async fn provide_definition(
     doc: &Document,
@@ -19,7 +18,7 @@ pub async fn provide_definition(
     config: &Config,
     workspace_roots: &HashSet<PathBuf>,
 ) -> PathServerResult<Option<lsp_types::GotoDefinitionResponse>> {
-    let tokens = get_or_compute_tokens(doc, config, workspace_roots, doc_path).await?;
+    let tokens = get_or_resolve_tokens(doc, config, workspace_roots, doc_path).await?;
     let filtered = tokens
         .iter()
         .filter(|t| config.highlight.highlight_directory || !t.is_dir);
