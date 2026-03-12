@@ -2,6 +2,19 @@
 
 Path Server is a fast and lightweight Language Server Protocol (LSP) implementation designed to provide path completion, highlight and navigation, offering a **Path Intellisense** experience.
 
+<table width="100%">
+  <tr>
+    <td width="50%" align="center">
+      <!-- <b>VS Code (Completion & Flow)</b><br/> -->
+      <img src="./assets/demo-vscode.gif" width="100%">
+    </td>
+    <td width="50%" align="center">
+      <!-- <b>Zed (Highlight & Navigation)</b><br/> -->
+      <img src="./assets/demo-zed.gif" width="100%">
+    </td>
+  </tr>
+</table>
+
 ## Features
 - **Path Completion**: Provides real-time suggestions for both relative and absolute paths.
 - **Path highlight and jump**: Automatically detects and underlines valid file paths in the editor, making them clickable for direct navigation.
