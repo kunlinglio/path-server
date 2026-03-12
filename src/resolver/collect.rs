@@ -48,23 +48,24 @@ async fn compute_tokens(
         .collect::<Vec<_>>();
     let parent = doc_path.parent().map(|p| p.to_string_lossy().into_owned());
     let home = std::env::var("HOME").ok();
-    let tokens: Vec<ResolvedPath> = future::try_join_all(parse_document(document).into_iter().map(
-        |candidates| async {
-            filter_exist_path(
-                candidates,
-                config,
-                &workspace_roots,
-                parent.as_ref(),
-                home.as_ref(),
-                document,
-            )
-            .await
-        },
-    ))
-    .await?
-    .into_iter()
-    .flatten()
-    .collect();
+    let tokens: Vec<ResolvedPath> =
+        future::try_join_all(parse_document(document).into_iter().flatten().map(
+            |candidates| async {
+                filter_exist_path(
+                    candidates,
+                    config,
+                    &workspace_roots,
+                    parent.as_ref(),
+                    home.as_ref(),
+                    document,
+                )
+                .await
+            },
+        ))
+        .await?
+        .into_iter()
+        .flatten()
+        .collect();
     Ok(tokens)
 }
 

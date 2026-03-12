@@ -1,13 +1,16 @@
 mod extractor;
 mod line;
 mod path;
+mod utils;
+
+use utils::*;
 
 pub use extractor::{new_tree, update_tree};
 pub use line::{parse_line, separate_prefix};
 pub use path::parse_document;
 
 /// Represents a parsed string in the source code with its range
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PathCandidate {
     pub content: String,
     pub start_byte: usize,
@@ -33,37 +36,24 @@ impl PathCandidate {
             .expect("char index out of bounds")
     }
 
-    /// Return an owned PathCandidate for a char-based range
-    pub fn slice(&self, start: usize, end: usize) -> PathCandidate {
-        if start > end {
-            panic!("range start greater than end");
-        }
-        let total = self.char_count();
-        if end > total {
-            panic!("range end out of bounds");
-        }
-        let bs = self.char_to_byte(start);
-        let be = self.char_to_byte(end);
-        let slice = &self.content[bs..be];
-        PathCandidate {
-            content: slice.to_string(),
-            start_byte: self.start_byte + bs,
-            end_byte: self.start_byte + be,
-        }
-    }
-
+    /// Slice by absolute byte positions in the document
     pub fn slice_bytes(&self, start_byte: usize, end_byte: usize) -> PathCandidate {
         if start_byte > end_byte {
             panic!("byte range start greater than end");
         }
-        if end_byte > self.content.len() {
-            panic!("byte range end out of bounds");
+        if start_byte < self.start_byte || end_byte > self.end_byte {
+            panic!("byte range out of bounds of this PathCandidate");
         }
-        let slice = &self.content[start_byte..end_byte];
+
+        // Convert absolute positions to relative offsets in self.content
+        let rel_start = start_byte - self.start_byte;
+        let rel_end = end_byte - self.start_byte;
+
+        let slice = &self.content[rel_start..rel_end];
         PathCandidate {
             content: slice.to_string(),
-            start_byte: self.start_byte + start_byte,
-            end_byte: self.start_byte + end_byte,
+            start_byte,
+            end_byte,
         }
     }
 
@@ -123,15 +113,17 @@ mod tests {
         let s = "aé𝄞b".to_string();
         let pc = PathCandidate {
             content: s.clone(),
-            start_byte: 0,
+            start_byte: 1,
             end_byte: s.len(),
         };
-        let sub = pc.slice(1, 3); // chars at indices 1..3 -> "é𝄞"
-        assert_eq!(sub.content, "é𝄞");
-        let expected_start = s.char_indices().nth(1).unwrap().0;
-        let expected_end = s.char_indices().nth(3).unwrap().0;
-        assert_eq!(sub.start_byte, expected_start);
-        assert_eq!(sub.end_byte, expected_end);
+        let sub = pc.slice_bytes(1 + 1, 1 + 3); // bytes at indices 1..3 -> "é𝄞"
+        assert_eq!(sub.content, "é");
+        assert_eq!(sub.start_byte, 2);
+        assert_eq!(sub.end_byte, 4);
+        let sub = pc.slice_bytes(1 + 3, 1 + 7); // bytes at indices 3..7 -> "𝄞b"
+        assert_eq!(sub.content, "𝄞");
+        assert_eq!(sub.start_byte, 4);
+        assert_eq!(sub.end_byte, 8);
     }
     #[test]
     fn path_candidate_trim_basic_unicode() {

@@ -1,7 +1,12 @@
+use std::collections::HashSet;
+
+use regex::Regex;
+
 use crate::document::{Document, Language};
 use crate::error::*;
 
 use super::super::PathCandidate;
+use super::super::split;
 
 /// Tree sitter languages
 mod ts_languages {
@@ -12,6 +17,8 @@ mod ts_languages {
     static TS_LANGUAGE: OnceLock<tree_sitter::Language> = OnceLock::new();
     static PY_LANGUAGE: OnceLock<tree_sitter::Language> = OnceLock::new();
     static RS_LANGUAGE: OnceLock<tree_sitter::Language> = OnceLock::new();
+    static MD_LANGUAGE: OnceLock<tree_sitter::Language> = OnceLock::new();
+    static MD_INLINE_LANGUAGE: OnceLock<tree_sitter::Language> = OnceLock::new();
 
     pub fn get_js_language() -> tree_sitter::Language {
         JS_LANGUAGE
@@ -37,6 +44,18 @@ mod ts_languages {
             .clone()
     }
 
+    pub fn get_md_language() -> tree_sitter::Language {
+        MD_LANGUAGE
+            .get_or_init(|| tree_sitter_md::LANGUAGE.into())
+            .clone()
+    }
+
+    pub fn get_md_inline_language() -> tree_sitter::Language {
+        MD_INLINE_LANGUAGE
+            .get_or_init(|| tree_sitter_md::INLINE_LANGUAGE.into())
+            .clone()
+    }
+
     /// Convert from Language, return None if not supported
     pub fn from_language(language: &Language) -> Option<tree_sitter::Language> {
         match language {
@@ -44,6 +63,7 @@ mod ts_languages {
             Language::typescript => Some(get_ts_language()),
             Language::python => Some(get_python_language()),
             Language::rust => Some(get_rust_language()),
+            Language::markdown => Some(get_md_language()),
             _ => None,
         }
     }
@@ -104,33 +124,162 @@ pub fn update_tree(
 
 /// Extract string literals from source code using tree-sitter
 /// Returns a vector of StringLiteral with their positions in the source
-pub fn extract_strings(document: &Document) -> Option<Vec<PathCandidate>> {
-    let tree = document.get_tree()?;
+pub fn extract_strings(document: &Document) -> PathServerResult<Option<Vec<PathCandidate>>> {
+    let Some(tree) = document.get_tree() else {
+        return Ok(None);
+    };
 
-    // Query to extract string nodes (varies by language)
-    Some(extract_strings_recursive(
-        &document.text,
-        &tree.root_node(),
-        &document.language,
-    ))
+    if document.language == Language::markdown {
+        Ok(Some(extract_strings_markdown(
+            &document.text,
+            &tree.root_node(),
+        )?))
+    } else {
+        Ok(Some(extract_strings_normal(
+            &document.text,
+            &tree.root_node(),
+            &document.language,
+        )))
+    }
+}
+
+fn extract_strings_markdown(
+    source: &str,
+    node: &tree_sitter::Node,
+) -> PathServerResult<Vec<PathCandidate>> {
+    // if inline node, parse it first
+    let inline_tree = if node.kind() == "inline" {
+        let mut inline_parser = tree_sitter::Parser::new();
+        inline_parser
+            .set_language(&ts_languages::get_md_inline_language())
+            .map_err(|_| PathServerError::ParseError("Failed to set inline language".into()))?;
+        inline_parser
+            .set_included_ranges(&[node.range()])
+            .map_err(|_| PathServerError::ParseError("Failed to set ranges".into()))?;
+        Some(
+            inline_parser
+                .parse(source, None)
+                .ok_or(PathServerError::ParseError("Failed to parse inline".into()))?,
+        )
+    } else {
+        None
+    };
+
+    let effective_node = inline_tree.as_ref().map(|t| t.root_node()).unwrap_or(*node);
+
+    // extract strings
+    let mut strings = HashSet::new();
+    match effective_node.kind() {
+        "link_destination" => {
+            // extract content of link_destination
+            return Ok(vec![PathCandidate {
+                content: source[effective_node.start_byte()..effective_node.end_byte()].to_string(),
+                start_byte: effective_node.start_byte(),
+                end_byte: effective_node.end_byte(),
+            }]);
+        }
+        "code_span" => {
+            // resolve the content except code_span_delimiter
+            let mut content_start = effective_node.start_byte();
+            let mut content_end = effective_node.end_byte();
+            let mut cursor = effective_node.walk();
+            for child in effective_node.children(&mut cursor) {
+                if child.kind() == "code_span_delimiter" {
+                    if child.start_byte() == effective_node.start_byte() {
+                        content_start = child.end_byte();
+                    }
+                    if child.end_byte() == effective_node.end_byte() {
+                        content_end = child.start_byte();
+                    }
+                }
+            }
+            return Ok(vec![PathCandidate {
+                content: source[content_start..content_end].to_string(),
+                start_byte: content_start,
+                end_byte: content_end,
+            }]);
+        }
+        "emphasis" => {
+            // strip *text* or _text_
+            let inner_start = effective_node.start_byte() + 1;
+            let inner_end = effective_node.end_byte() - 1;
+            return Ok(vec![PathCandidate {
+                content: source[inner_start..inner_end].to_string(),
+                start_byte: inner_start,
+                end_byte: inner_end,
+            }]);
+        }
+        "strong_emphasis" => {
+            // strip **text** or __text__
+            let inner_start = effective_node.start_byte() + 2;
+            let inner_end = effective_node.end_byte() - 2;
+            return Ok(vec![PathCandidate {
+                content: source[inner_start..inner_end].to_string(),
+                start_byte: inner_start,
+                end_byte: inner_end,
+            }]);
+        }
+        "inline" if inline_tree.is_some() => {
+            // fall back extractor
+            let node_text = &source[effective_node.start_byte()..effective_node.end_byte()];
+            let offset = effective_node.start_byte();
+            let regex = [r#"'([^']+)'"#, r#""([^"]+)""#]; // extract content in `'` and `"`
+
+            for pattern in regex {
+                let re = Regex::new(pattern).unwrap();
+                for cap in re.captures_iter(node_text) {
+                    if let Some(inner) = cap.get(1) {
+                        let content = inner.as_str();
+                        strings.insert(PathCandidate {
+                            content: content.to_string(),
+                            start_byte: offset + inner.start(),
+                            end_byte: offset + inner.end(),
+                        });
+                    }
+                }
+            }
+        }
+        "code_block" | "fenced_code_block" => {
+            // split by space and \n
+            let node_text = &source[effective_node.start_byte()..effective_node.end_byte()];
+            strings.extend(split(
+                node_text,
+                &PathCandidate {
+                    content: node_text.to_string(),
+                    start_byte: effective_node.start_byte(),
+                    end_byte: effective_node.end_byte(),
+                },
+                &[' ', '\n'],
+            ));
+        }
+        _ => {}
+    }
+
+    // recursively process children
+    let mut cursor = effective_node.walk();
+    for child in effective_node.children(&mut cursor) {
+        strings.extend(extract_strings_markdown(source, &child)?);
+    }
+
+    Ok(strings.into_iter().collect::<Vec<_>>())
 }
 
 /// Recursively walk the syntax tree and extract string nodes
-fn extract_strings_recursive(
+fn extract_strings_normal(
     source: &str,
     node: &tree_sitter::Node,
     language: &Language,
 ) -> Vec<PathCandidate> {
     let mut strings = Vec::new();
-    // Check if this node is a string
+    // check if this node is a string
     if is_string_node(node, language) {
         strings.extend(extract_string_content(source, node, language));
     }
 
-    // Recursively process children
+    // recursively process children
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        strings.extend(extract_strings_recursive(source, &child, language));
+        strings.extend(extract_strings_normal(source, &child, language));
     }
     strings
 }
@@ -188,6 +337,7 @@ fn is_string_node(node: &tree_sitter::Node, language: &Language) -> bool {
         }
         Language::python => kind == "string",
         Language::rust => kind == "string_literal" || kind == "raw_string_literal",
+        Language::markdown => unreachable!("is_string_node called with markdown language"),
         _ => false,
     }
 }
@@ -199,7 +349,8 @@ fn is_string_fragment_node(node: &tree_sitter::Node, language: &Language) -> boo
         Language::javascript | Language::typescript => kind == "string_fragment",
         Language::python => kind == "string_content",
         Language::rust => kind == "string_content",
-        _ => false,
+        Language::markdown => unreachable!("is_string_fragment_node called with markdown language"),
+        _ => unreachable!("is_string_fragment_node called with unsupported language"),
     }
 }
 
@@ -211,11 +362,14 @@ fn is_escaped_character_node(node: &tree_sitter::Node, language: &Language) -> b
         Language::javascript | Language::typescript => kind == "escape_sequence",
         Language::python => kind == "escape_sequence",
         Language::rust => kind == "escape_sequence",
-        _ => false,
+        Language::markdown => {
+            unreachable!("is_escaped_character_node called with markdown language")
+        }
+        _ => unreachable!("is_escaped_character_node called with unsupported language"),
     }
 }
 
-// TODO: tree-sitter-markdown tree-sitter-html
+// TODO: tree-sitter-html
 
 #[cfg(test)]
 mod tests {
@@ -225,7 +379,7 @@ mod tests {
     fn parse_and_extract(lang: Language, src: &str) -> Vec<PathCandidate> {
         let doc = Document::new(src.to_string(), &lang.to_string())
             .expect("failed to create Document for parsing");
-        extract_strings(&doc).unwrap_or_default()
+        extract_strings(&doc).unwrap().unwrap()
     }
 
     /// Print the entire tree-sitter AST
@@ -237,10 +391,37 @@ mod tests {
             .set_language(&ts_lang)
             .expect("failed to set language");
         let tree = parser.parse(source, None).expect("failed to parse source");
-        print_tree_node(source, &tree.root_node(), "", true);
+        print_tree_node(source, &tree.root_node(), "", true, language);
     }
 
-    fn print_tree_node(source: &str, node: &tree_sitter::Node, prefix: &str, is_last: bool) {
+    fn print_tree_node(
+        source: &str,
+        node: &tree_sitter::Node,
+        prefix: &str,
+        is_last: bool,
+        language: &Language,
+    ) {
+        let inline_tree = if language == &Language::markdown && node.kind() == "inline" {
+            let mut inline_parser = tree_sitter::Parser::new();
+            inline_parser
+                .set_language(&ts_languages::get_md_inline_language())
+                .expect("failed to set inline language");
+            inline_parser
+                .set_included_ranges(&vec![node.range()])
+                .expect("failed to set included ranges");
+            Some(
+                inline_parser
+                    .parse(source, None)
+                    .expect("failed to parse inline source"),
+            )
+        } else {
+            None
+        };
+        let node = if let Some(inline_tree) = &inline_tree {
+            &inline_tree.root_node()
+        } else {
+            node
+        };
         let kind = node.kind();
         let start = node.start_byte();
         let end = node.end_byte();
@@ -273,7 +454,7 @@ mod tests {
             } else {
                 format!("{}{}", prefix, if is_last { "   " } else { "│  " })
             };
-            print_tree_node(source, child, &new_prefix, last);
+            print_tree_node(source, child, &new_prefix, last, language);
         }
     }
 
@@ -401,6 +582,88 @@ mod tests {
         assert!(
             res.iter().any(|c| c.content.contains("line1\\\\nline2")),
             "missing 'line1\\\\nline2' with escaped newline"
+        );
+    }
+
+    #[test]
+    fn test_markdown_extract_strings() {
+        let link = "![a picture](./public/image.png)";
+        print_tree(&Language::markdown, link);
+        let res = parse_and_extract(Language::markdown, link);
+        assert!(
+            res.iter().any(|c| c.content.contains("./public/image.png")),
+            "missing link destination"
+        );
+        let text_in_quotes = "some text and `./public/image1.png`\nmore text and './public/image2.png'\n even more and \"./public/image3.png\"";
+        print_tree(&Language::markdown, text_in_quotes);
+        let res = parse_and_extract(Language::markdown, text_in_quotes);
+        eprintln!("{:?}", res);
+        assert!(
+            res.iter()
+                .any(|c| c.content.contains("./public/image1.png")),
+            "missing path in code span"
+        );
+        assert!(
+            res.iter()
+                .any(|c| c.content.contains("./public/image2.png")),
+            "missing path in code span"
+        );
+        assert!(
+            res.iter()
+                .any(|c| c.content.contains("./public/image3.png")),
+            "missing path in code span"
+        );
+        let text_in_starts = "some text and *bold* and **strong**";
+        print_tree(&Language::markdown, text_in_starts);
+        let res = parse_and_extract(Language::markdown, text_in_starts);
+        assert!(
+            res.iter().any(|c| c.content.contains("bold")),
+            "missing bold text"
+        );
+        assert!(
+            res.iter().any(|c| c.content.contains("strong")),
+            "missing strong text"
+        );
+        let common_path_in_text = r#"
+# h1
+## h2
+```code
+cd ./extensions/vscode/
+```
+        "#;
+        print_tree(&Language::markdown, common_path_in_text);
+        let res = parse_and_extract(Language::markdown, common_path_in_text);
+        assert!(
+            res.iter()
+                .any(|c| c.content.contains("./extensions/vscode/")),
+            "missing path in code block"
+        );
+        let complicated_case = r#"
+## Usage
+You can use Path Server by installing the extension for your editor, or by building it from source.
+
+After installing, start typing a path prefix like `./`, `/` or `C:\` in any file to trigger path suggestions.
+
+
+### File Structure
+The **Path Server** project is organized in mono-repository structure with core LSP server implementation and extensions for different editors.
+
+- The core LSP server implementation and tests are located in the repository root.
+- The **Zed Extension** is located in `./extensions/zed`.
+- The **VS Code** is located in `./extensions/vscode`.
+
+        "#;
+        print_tree(&Language::markdown, complicated_case);
+        let res = parse_and_extract(Language::markdown, complicated_case);
+        eprintln!("{:?}", res);
+        assert!(
+            res.iter().any(|c| c.content.contains("./extensions/zed")),
+            "missing path in Zed extension"
+        );
+        assert!(
+            res.iter()
+                .any(|c| c.content.contains("./extensions/vscode")),
+            "missing path in VS Code extension"
         );
     }
 }

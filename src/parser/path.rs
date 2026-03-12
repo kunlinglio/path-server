@@ -2,15 +2,17 @@
 use std::vec::Vec;
 
 use crate::document::Document;
+use crate::error::*;
 
 use super::PathCandidate;
 use super::extractor::extract_string;
+use super::split;
 
-pub fn parse_document(document: &Document) -> Vec<Vec<PathCandidate>> {
-    extract_string(document)
+pub fn parse_document(document: &Document) -> PathServerResult<Vec<Vec<PathCandidate>>> {
+    Ok(extract_string(document)?
         .into_iter()
         .map(extract_paths_from_string)
-        .collect()
+        .collect())
 }
 
 /// Try to extract paths from a string token,
@@ -25,24 +27,7 @@ fn extract_paths_from_string(path_ref: PathCandidate) -> Vec<PathCandidate> {
     }
 
     // Level 2: the part of string (split by space) is a path or not
-    let mut last_pos = 0;
-    while let Some(pos) = content[last_pos..].find(' ') {
-        let end = last_pos + pos;
-        if end > last_pos {
-            let sub_content = &content[last_pos..end];
-            if sub_content.contains('/') || sub_content.contains('\\') {
-                results.push(path_ref.slice_bytes(last_pos, end).trim());
-            }
-        }
-        last_pos = end + 1;
-    }
-    // process last part
-    if last_pos < content.len() {
-        let sub_content = &content[last_pos..];
-        if sub_content.contains('/') || sub_content.contains('\\') {
-            results.push(path_ref.slice_bytes(last_pos, content.len()).trim());
-        }
-    }
+    results.extend(split(content, &path_ref, &[' ', '\n']));
 
     results
 }
@@ -56,7 +41,7 @@ mod tests {
     fn parse_document_detects_whole_and_tail_paths() {
         let src = r#"const a = "/home/user/project/src/main.rs"; const b = "see /tmp/dir";"#;
         let doc = Document::new(src.to_string(), "javascript").unwrap();
-        let res = crate::parser::parse_document(&doc);
+        let res = crate::parser::parse_document(&doc).unwrap();
         let flat: Vec<String> = res.into_iter().flatten().map(|p| p.content).collect();
         assert!(
             flat.iter()
@@ -69,7 +54,7 @@ mod tests {
     fn extractor_fallback_for_unsupported_language() {
         let src = r#"const a = "/tmp/test/path";"#.to_string();
         let doc = Document::new(src.clone(), "unknown").unwrap();
-        let res = crate::parser::extractor::extract_string(&doc);
+        let res = crate::parser::extractor::extract_string(&doc).unwrap();
         assert!(res.iter().any(|p| p.content.contains("/tmp/test/path")));
     }
 

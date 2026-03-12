@@ -360,7 +360,7 @@ impl tower_lsp::LanguageServer for PathServer {
         let config = self.get_config().await;
         let client = get_client().await;
         if !client.support_document_link {
-            info("[Document Lint] Client does not support document link".into()).await;
+            info("[Document Link] Client does not support document link".into()).await;
             return Ok(None);
         };
         if !config.highlight.enable {
@@ -489,7 +489,7 @@ impl tower_lsp::LanguageServer for PathServer {
         let doc = documents
             .get(&path)
             .ok_or(PathServerError::Unknown(format!(
-                "Document {} not found, please open it before providing goto definition",
+                "Document {} not found, please open it before hover information",
                 path.display()
             )))?;
         let workspace_roots = self.workspace_roots.read().await;

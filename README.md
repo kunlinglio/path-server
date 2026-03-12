@@ -170,11 +170,11 @@ The VS Code extension acts as a client that launches the Rust binary.
     npm install
     ```
 2. Debug:  
-    Press `F5` `or run Debug`: Select and Start Debugging -> Run Extension.
+    Press `F5` or `run Debug`: Select and Start Debugging -> Run Extension.
 
     > This will build the language server automatically and launch a "Extension Development Host" window.
 
-4. View Logs:
+3. View Logs:
     The server logs will be redirect to `Output panel` -> `Path Server Language Server`
 
 ## License

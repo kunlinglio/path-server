@@ -5,6 +5,7 @@ All notable changes to the Path Server will be documented in this file.
 ## [Unreleased]
 ### Added
 - **Core**: Support to provide hover information on paths.
+- **Core**: Added tree-sitter markdown support.
 
 ### Changed
 - **Core**: Change default build to single thread to reduce resource consumption. You can enable multi-threading by building with the `multi-thread` feature.
