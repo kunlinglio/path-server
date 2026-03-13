@@ -19,6 +19,7 @@ mod ts_languages {
     static RS_LANGUAGE: OnceLock<tree_sitter::Language> = OnceLock::new();
     static MD_LANGUAGE: OnceLock<tree_sitter::Language> = OnceLock::new();
     static MD_INLINE_LANGUAGE: OnceLock<tree_sitter::Language> = OnceLock::new();
+    static HTML_LANGUAGE: OnceLock<tree_sitter::Language> = OnceLock::new();
 
     pub fn get_js_language() -> tree_sitter::Language {
         JS_LANGUAGE
@@ -56,6 +57,12 @@ mod ts_languages {
             .clone()
     }
 
+    pub fn get_html_language() -> tree_sitter::Language {
+        HTML_LANGUAGE
+            .get_or_init(|| tree_sitter_html::LANGUAGE.into())
+            .clone()
+    }
+
     /// Convert from Language, return None if not supported
     pub fn from_language(language: &Language) -> Option<tree_sitter::Language> {
         match language {
@@ -64,6 +71,7 @@ mod ts_languages {
             Language::python => Some(get_python_language()),
             Language::rust => Some(get_rust_language()),
             Language::markdown => Some(get_md_language()),
+            Language::html => Some(get_html_language()),
             _ => None,
         }
     }
@@ -331,14 +339,18 @@ fn extract_string_content(
     let mut cursor = node.walk();
     let mut begin_byte = node.start_byte();
     let mut end_byte = node.end_byte();
-    for (i, child) in node.children(&mut cursor).enumerate() {
-        if i == 0 {
-            begin_byte = child.start_byte();
-        }
-        if i == node.child_count() - 1 {
-            end_byte = child.end_byte();
-        }
+    let mut have_string_fragment = false;
+    for child in node.children(&mut cursor) {
+        eprintln!("Child kind: {}", child.kind());
+
         if is_string_fragment_node(&child, language) {
+            if !have_string_fragment {
+                begin_byte = child.start_byte();
+                have_string_fragment = true;
+            }
+            // if i == node.child_count() - 1 {
+            end_byte = child.end_byte();
+            // }
             continue;
         }
         if !is_escaped_character_node(&child, language) {
@@ -368,6 +380,36 @@ fn extract_string_content(
         };
         candidates.push(candidate);
     }
+    // fall back regex parse
+    if need_regex_parse(node, language) {
+        // parse based on `'` and `"` and space
+        let node_text = &source[node.start_byte()..node.end_byte()];
+        let offset = node.start_byte();
+        let regex = [r#"'([^']+)'"#, r#""([^"]+)""#]; // extract content in `'` and `"`
+
+        for pattern in regex {
+            let re = Regex::new(pattern).unwrap();
+            for cap in re.captures_iter(node_text) {
+                if let Some(inner) = cap.get(1) {
+                    let content = inner.as_str();
+                    candidates.push(PathCandidate {
+                        content: content.to_string(),
+                        start_byte: offset + inner.start(),
+                        end_byte: offset + inner.end(),
+                    });
+                }
+            }
+        }
+        candidates.extend(split(
+            node_text,
+            &PathCandidate {
+                content: node_text.to_string(),
+                start_byte: node.start_byte(),
+                end_byte: node.end_byte(),
+            },
+            &[' ', '\n'],
+        ));
+    }
     candidates
 }
 
@@ -381,6 +423,7 @@ fn is_string_node(node: &tree_sitter::Node, language: &Language) -> bool {
         Language::python => kind == "string",
         Language::rust => kind == "string_literal" || kind == "raw_string_literal",
         Language::markdown => unreachable!("is_string_node called with markdown language"),
+        Language::html => kind == "text" || kind == "quoted_attribute_value",
         _ => false,
     }
 }
@@ -393,6 +436,7 @@ fn is_string_fragment_node(node: &tree_sitter::Node, language: &Language) -> boo
         Language::python => kind == "string_content",
         Language::rust => kind == "string_content",
         Language::markdown => unreachable!("is_string_fragment_node called with markdown language"),
+        Language::html => kind == "attribute_value",
         _ => unreachable!("is_string_fragment_node called with unsupported language"),
     }
 }
@@ -408,7 +452,21 @@ fn is_escaped_character_node(node: &tree_sitter::Node, language: &Language) -> b
         Language::markdown => {
             unreachable!("is_escaped_character_node called with markdown language")
         }
+        Language::html => true,
         _ => unreachable!("is_escaped_character_node called with unsupported language"),
+    }
+}
+
+fn need_regex_parse(node: &tree_sitter::Node, language: &Language) -> bool {
+    match language {
+        Language::javascript | Language::typescript => false,
+        Language::python => false,
+        Language::rust => false,
+        Language::markdown => {
+            unreachable!("need_regex_parse called with markdown language")
+        }
+        Language::html => node.kind() == "text",
+        _ => unreachable!("need_regex_parse called with unsupported language"),
     }
 }
 
@@ -711,5 +769,35 @@ Project Timer is a lightweight VS Code extension that tracks the time you spend 
             res.iter().any(|c| c.content == "./resources/demo.gif"),
             "missing path in HTML block"
         );
+    }
+
+    #[test]
+    fn test_html_extract_string() {
+        let simple = r#"    <script src="echarts.min.js"></script>"#;
+        print_tree(&Language::html, simple);
+        let res = parse_and_extract(Language::html, simple);
+        eprintln!("{:?}", res);
+        assert!(res.iter().any(|c| c.content == "echarts.min.js"));
+        let html = r#"
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <script src="echarts.min.js"></script>
+    <link rel="stylesheet" href="statistics.css">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+</head>
+
+<body>
+<h1>Title</h1>
+<div>Some content include a path ./extension.toml</div>
+</body>
+        "#;
+        print_tree(&Language::html, html);
+        let res = parse_and_extract(Language::html, html);
+        eprintln!("{:?}", res);
+        assert!(res.iter().any(|c| c.content == "echarts.min.js"));
+        assert!(res.iter().any(|c| c.content == "statistics.css"));
+        assert!(res.iter().any(|c| c.content == "./extension.toml"));
     }
 }
