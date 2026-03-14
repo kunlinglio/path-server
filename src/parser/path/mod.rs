@@ -1,18 +1,30 @@
 //! Parsers for document path parsing.
+mod regex;
+
 use std::vec::Vec;
 
 use crate::document::Document;
 use crate::error::*;
 
 use super::PathCandidate;
-use super::extractor::extract_string;
-use super::split;
+use super::tree_sitter;
 
 pub fn parse_document(document: &Document) -> PathServerResult<Vec<Vec<PathCandidate>>> {
     Ok(extract_string(document)?
         .into_iter()
         .map(extract_paths_from_string)
         .collect())
+}
+
+/// Extract string tokens from the document
+fn extract_string(document: &Document) -> PathServerResult<Vec<PathCandidate>> {
+    let res = tree_sitter::extract_strings(document)?;
+    if let Some(res) = res {
+        Ok(res)
+    } else {
+        // fall back to general parser
+        Ok(regex::extract_string(document).unwrap_or_default())
+    }
 }
 
 /// Try to extract paths from a string token,
@@ -27,7 +39,7 @@ fn extract_paths_from_string(path_ref: PathCandidate) -> Vec<PathCandidate> {
     }
 
     // Level 2: the part of string (split by space) is a path or not
-    results.extend(split(content, &path_ref, &[' ', '\n']));
+    results.extend(path_ref.split(content, &[' ', '\n']));
 
     results
 }
@@ -54,7 +66,7 @@ mod tests {
     fn extractor_fallback_for_unsupported_language() {
         let src = r#"const a = "/tmp/test/path";"#.to_string();
         let doc = Document::new(src.clone(), "unknown").unwrap();
-        let res = crate::parser::extractor::extract_string(&doc).unwrap();
+        let res = extract_string(&doc).unwrap();
         assert!(res.iter().any(|p| p.content.contains("/tmp/test/path")));
     }
 

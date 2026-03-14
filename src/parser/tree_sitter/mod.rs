@@ -1,15 +1,17 @@
-use std::collections::HashSet;
-
-use regex::Regex;
+//! Extract strings token by tree-sitter lib
+mod ts_general;
+mod ts_html;
+mod ts_markdown;
 
 use crate::document::{Document, Language};
 use crate::error::*;
 
-use super::super::PathCandidate;
-use super::super::split;
+use std::collections::HashSet;
+
+use super::PathCandidate;
 
 /// Tree sitter languages
-mod ts_languages {
+pub mod ts_languages {
     use crate::document::Language;
     use std::sync::OnceLock;
 
@@ -19,6 +21,9 @@ mod ts_languages {
     static RS_LANGUAGE: OnceLock<tree_sitter::Language> = OnceLock::new();
     static MD_LANGUAGE: OnceLock<tree_sitter::Language> = OnceLock::new();
     static MD_INLINE_LANGUAGE: OnceLock<tree_sitter::Language> = OnceLock::new();
+    static HTML_LANGUAGE: OnceLock<tree_sitter::Language> = OnceLock::new();
+    static C_LANGUAGE: OnceLock<tree_sitter::Language> = OnceLock::new();
+    static CPP_LANGUAGE: OnceLock<tree_sitter::Language> = OnceLock::new();
 
     pub fn get_js_language() -> tree_sitter::Language {
         JS_LANGUAGE
@@ -56,6 +61,24 @@ mod ts_languages {
             .clone()
     }
 
+    pub fn get_html_language() -> tree_sitter::Language {
+        HTML_LANGUAGE
+            .get_or_init(|| tree_sitter_html::LANGUAGE.into())
+            .clone()
+    }
+
+    pub fn get_c_language() -> tree_sitter::Language {
+        C_LANGUAGE
+            .get_or_init(|| tree_sitter_c::LANGUAGE.into())
+            .clone()
+    }
+
+    pub fn get_cpp_language() -> tree_sitter::Language {
+        CPP_LANGUAGE
+            .get_or_init(|| tree_sitter_cpp::LANGUAGE.into())
+            .clone()
+    }
+
     /// Convert from Language, return None if not supported
     pub fn from_language(language: &Language) -> Option<tree_sitter::Language> {
         match language {
@@ -64,6 +87,9 @@ mod ts_languages {
             Language::python => Some(get_python_language()),
             Language::rust => Some(get_rust_language()),
             Language::markdown => Some(get_md_language()),
+            Language::html => Some(get_html_language()),
+            Language::c => Some(get_c_language()),
+            Language::c_plus_plus => Some(get_cpp_language()),
             _ => None,
         }
     }
@@ -129,247 +155,24 @@ pub fn extract_strings(document: &Document) -> PathServerResult<Option<Vec<PathC
         return Ok(None);
     };
 
-    if document.language == Language::markdown {
-        Ok(Some(extract_strings_markdown(
-            &document.text,
-            &tree.root_node(),
-        )?))
-    } else {
-        Ok(Some(extract_strings_normal(
-            &document.text,
-            &tree.root_node(),
-            &document.language,
-        )))
-    }
-}
-
-fn extract_strings_markdown(
-    source: &str,
-    node: &tree_sitter::Node,
-) -> PathServerResult<Vec<PathCandidate>> {
-    // if inline node, parse it first
-    let inline_tree = if node.kind() == "inline" {
-        let mut inline_parser = tree_sitter::Parser::new();
-        inline_parser
-            .set_language(&ts_languages::get_md_inline_language())
-            .map_err(|_| PathServerError::ParseError("Failed to set inline language".into()))?;
-        inline_parser
-            .set_included_ranges(&[node.range()])
-            .map_err(|_| PathServerError::ParseError("Failed to set ranges".into()))?;
-        Some(
-            inline_parser
-                .parse(source, None)
-                .ok_or(PathServerError::ParseError("Failed to parse inline".into()))?,
-        )
-    } else {
-        None
+    let candidates = match document.language {
+        Language::markdown => ts_markdown::extract_strings(&document.text, &tree.root_node())?,
+        Language::html => {
+            ts_html::extract_strings(&document.text, &tree.root_node(), &document.language)
+        }
+        Language::javascript
+        | Language::typescript
+        | Language::python
+        | Language::rust
+        | Language::c
+        | Language::c_plus_plus => {
+            ts_general::extract_strings(&document.text, &tree.root_node(), &document.language)
+        }
+        _ => unreachable!("Unsupported language: {}", document.language),
     };
-
-    let effective_node = inline_tree.as_ref().map(|t| t.root_node()).unwrap_or(*node);
-
-    // extract strings
-    let mut strings = HashSet::new();
-    match effective_node.kind() {
-        "link_destination" => {
-            // extract content of link_destination
-            return Ok(vec![PathCandidate {
-                content: source[effective_node.start_byte()..effective_node.end_byte()].to_string(),
-                start_byte: effective_node.start_byte(),
-                end_byte: effective_node.end_byte(),
-            }]);
-        }
-        "code_span" => {
-            // resolve the content except code_span_delimiter
-            let mut content_start = effective_node.start_byte();
-            let mut content_end = effective_node.end_byte();
-            let mut cursor = effective_node.walk();
-            for child in effective_node.children(&mut cursor) {
-                if child.kind() == "code_span_delimiter" {
-                    if child.start_byte() == effective_node.start_byte() {
-                        content_start = child.end_byte();
-                    }
-                    if child.end_byte() == effective_node.end_byte() {
-                        content_end = child.start_byte();
-                    }
-                }
-            }
-            return Ok(vec![PathCandidate {
-                content: source[content_start..content_end].to_string(),
-                start_byte: content_start,
-                end_byte: content_end,
-            }]);
-        }
-        "emphasis" => {
-            // strip *text* or _text_
-            let inner_start = effective_node.start_byte() + 1;
-            let inner_end = effective_node.end_byte() - 1;
-            return Ok(vec![PathCandidate {
-                content: source[inner_start..inner_end].to_string(),
-                start_byte: inner_start,
-                end_byte: inner_end,
-            }]);
-        }
-        "strong_emphasis" => {
-            // strip **text** or __text__
-            let inner_start = effective_node.start_byte() + 2;
-            let inner_end = effective_node.end_byte() - 2;
-            return Ok(vec![PathCandidate {
-                content: source[inner_start..inner_end].to_string(),
-                start_byte: inner_start,
-                end_byte: inner_end,
-            }]);
-        }
-        "inline" if inline_tree.is_some() => {
-            // fall back extractor
-            let node_text = &source[effective_node.start_byte()..effective_node.end_byte()];
-            let offset = effective_node.start_byte();
-            let regex = [r#"'([^']+)'"#, r#""([^"]+)""#]; // extract content in `'` and `"`
-
-            for pattern in regex {
-                let re = Regex::new(pattern).unwrap();
-                for cap in re.captures_iter(node_text) {
-                    if let Some(inner) = cap.get(1) {
-                        let content = inner.as_str();
-                        strings.insert(PathCandidate {
-                            content: content.to_string(),
-                            start_byte: offset + inner.start(),
-                            end_byte: offset + inner.end(),
-                        });
-                    }
-                }
-            }
-        }
-        "code_block" | "fenced_code_block" => {
-            // split by space and \n
-            let node_text = &source[effective_node.start_byte()..effective_node.end_byte()];
-            strings.extend(split(
-                node_text,
-                &PathCandidate {
-                    content: node_text.to_string(),
-                    start_byte: effective_node.start_byte(),
-                    end_byte: effective_node.end_byte(),
-                },
-                &[' ', '\n'],
-            ));
-        }
-        _ => {}
-    }
-
-    // recursively process children
-    let mut cursor = effective_node.walk();
-    for child in effective_node.children(&mut cursor) {
-        strings.extend(extract_strings_markdown(source, &child)?);
-    }
-
-    Ok(strings.into_iter().collect::<Vec<_>>())
+    let deduplicated: HashSet<PathCandidate> = HashSet::from_iter(candidates);
+    Ok(Some(deduplicated.into_iter().collect()))
 }
-
-/// Recursively walk the syntax tree and extract string nodes
-fn extract_strings_normal(
-    source: &str,
-    node: &tree_sitter::Node,
-    language: &Language,
-) -> Vec<PathCandidate> {
-    let mut strings = Vec::new();
-    // check if this node is a string
-    if is_string_node(node, language) {
-        strings.extend(extract_string_content(source, node, language));
-    }
-
-    // recursively process children
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        strings.extend(extract_strings_normal(source, &child, language));
-    }
-    strings
-}
-
-fn extract_string_content(
-    source: &str,
-    node: &tree_sitter::Node,
-    language: &Language,
-) -> Vec<PathCandidate> {
-    let mut candidates = Vec::new();
-    let mut cursor = node.walk();
-    let mut begin_byte = node.start_byte();
-    for child in node.children(&mut cursor) {
-        if is_string_fragment_node(&child, language) {
-            continue;
-        } else if !is_escaped_character_node(&child, language) {
-            // is not a string fragment or escaped character, treat it as a separator
-            // the content before it is a candidate
-            if child.start_byte() > begin_byte {
-                // only add candidate if there is content before the separator
-                let candidate = PathCandidate {
-                    content: source
-                        .get(begin_byte..child.start_byte())
-                        .unwrap_or("")
-                        .to_string(),
-                    start_byte: begin_byte,
-                    end_byte: child.start_byte(),
-                };
-                candidates.push(candidate);
-            }
-            begin_byte = child.end_byte();
-        }
-    }
-    // add the last candidate after the last fragment
-    if begin_byte < node.end_byte() {
-        let candidate = PathCandidate {
-            content: source
-                .get(begin_byte..node.end_byte())
-                .unwrap_or("")
-                .to_string(),
-            start_byte: begin_byte,
-            end_byte: node.end_byte(),
-        };
-        candidates.push(candidate);
-    }
-    candidates
-}
-
-/// Determine if a node represents a string literal
-fn is_string_node(node: &tree_sitter::Node, language: &Language) -> bool {
-    let kind = node.kind();
-    match language {
-        Language::javascript | Language::typescript => {
-            kind == "string" || kind == "template_string"
-        }
-        Language::python => kind == "string",
-        Language::rust => kind == "string_literal" || kind == "raw_string_literal",
-        Language::markdown => unreachable!("is_string_node called with markdown language"),
-        _ => false,
-    }
-}
-
-/// Determine if a node represents a part of string literal
-fn is_string_fragment_node(node: &tree_sitter::Node, language: &Language) -> bool {
-    let kind = node.kind();
-    match language {
-        Language::javascript | Language::typescript => kind == "string_fragment",
-        Language::python => kind == "string_content",
-        Language::rust => kind == "string_content",
-        Language::markdown => unreachable!("is_string_fragment_node called with markdown language"),
-        _ => unreachable!("is_string_fragment_node called with unsupported language"),
-    }
-}
-
-/// Determine if a node represents an escaped character in a string
-/// This will be included in the path candidate
-fn is_escaped_character_node(node: &tree_sitter::Node, language: &Language) -> bool {
-    let kind = node.kind();
-    match language {
-        Language::javascript | Language::typescript => kind == "escape_sequence",
-        Language::python => kind == "escape_sequence",
-        Language::rust => kind == "escape_sequence",
-        Language::markdown => {
-            unreachable!("is_escaped_character_node called with markdown language")
-        }
-        _ => unreachable!("is_escaped_character_node called with unsupported language"),
-    }
-}
-
-// TODO: tree-sitter-html
 
 #[cfg(test)]
 mod tests {
@@ -465,7 +268,7 @@ mod tests {
         print_tree(&Language::javascript, normal_src);
         let res = parse_and_extract(Language::javascript, normal_src);
         assert!(
-            res.iter().any(|c| c.content.contains("hello world")),
+            res.iter().any(|c| c.content == "hello world"),
             "missing 'hello world' fragment"
         );
         // template string with interpolation
@@ -473,11 +276,11 @@ mod tests {
         print_tree(&Language::javascript, template_src);
         let res = parse_and_extract(Language::javascript, template_src);
         assert!(
-            res.iter().any(|c| c.content.contains("hello")),
-            "missing 'hello' fragment"
+            res.iter().any(|c| c.content == "hello "),
+            "missing 'hello ' fragment"
         );
         assert!(
-            res.iter().any(|c| c.content.contains(" world")),
+            res.iter().any(|c| c.content == " world"),
             "missing ' world' fragment"
         );
         // string with escaped characters
@@ -485,7 +288,7 @@ mod tests {
         print_tree(&Language::javascript, escape_src);
         let res = parse_and_extract(Language::javascript, escape_src);
         assert!(
-            res.iter().any(|c| c.content.contains("line1\\\\line2")),
+            res.iter().any(|c| c.content == "line1\\\\line2"),
             "missing 'line1\\\\line2' with escaped newline"
         );
     }
@@ -497,7 +300,7 @@ mod tests {
         print_tree(&Language::typescript, normal_src);
         let res = parse_and_extract(Language::typescript, normal_src);
         assert!(
-            res.iter().any(|c| c.content.contains("hello world")),
+            res.iter().any(|c| c.content == "hello world"),
             "missing 'hello world' fragment"
         );
         // template string with interpolation
@@ -505,11 +308,11 @@ mod tests {
         print_tree(&Language::typescript, template_src);
         let res = parse_and_extract(Language::typescript, template_src);
         assert!(
-            res.iter().any(|c| c.content.contains("ts ")),
+            res.iter().any(|c| c.content == "ts "),
             "missing 'ts ' fragment"
         );
         assert!(
-            res.iter().any(|c| c.content.contains(" end")),
+            res.iter().any(|c| c.content == " end"),
             "missing ' end' fragment"
         );
         // string with escaped characters
@@ -517,7 +320,7 @@ mod tests {
         print_tree(&Language::typescript, escape_src);
         let res = parse_and_extract(Language::typescript, escape_src);
         assert!(
-            res.iter().any(|c| c.content.contains("line1\\\\line2")),
+            res.iter().any(|c| c.content == "line1\\\\line2"),
             "missing 'line1\\\\line2' with escaped newline"
         );
     }
@@ -532,17 +335,10 @@ mod tests {
         "#;
         print_tree(&Language::python, normal_src);
         let res = parse_and_extract(Language::python, normal_src);
+        assert!(res.iter().any(|c| c.content == "hello"), "missing 'hello'");
+        assert!(res.iter().any(|c| c.content == "world"), "missing 'world'");
         assert!(
-            res.iter().any(|c| c.content.contains("hello")),
-            "missing 'hello'"
-        );
-        assert!(
-            res.iter().any(|c| c.content.contains("world")),
-            "missing 'world'"
-        );
-        assert!(
-            res.iter()
-                .any(|c| c.content.trim().contains(r#"multi\nline"#)),
+            res.iter().any(|c| c.content.trim() == r#"multi\nline"#),
             "missing 'multi\nline' in triple-quoted string"
         );
         // f-string
@@ -550,7 +346,7 @@ mod tests {
         print_tree(&Language::python, f_string_src);
         let res = parse_and_extract(Language::python, f_string_src);
         assert!(
-            res.iter().any(|c| c.content.contains("hello")),
+            res.iter().any(|c| c.content == "hello "),
             "missing 'hello' in f-string"
         );
         // string with escaped characters
@@ -558,7 +354,7 @@ mod tests {
         print_tree(&Language::python, escape_src);
         let res = parse_and_extract(Language::python, escape_src);
         assert!(
-            res.iter().any(|c| c.content.contains("line1\\\\line2")),
+            res.iter().any(|c| c.content == "line1\\\\line2"),
             "missing 'line1\\\\line2' with escaped newline"
         );
     }
@@ -568,19 +364,16 @@ mod tests {
         let src = "let a = \"hello\"; let b = r#\"raw content\"#";
         print_tree(&Language::rust, src);
         let res = parse_and_extract(Language::rust, src);
+        assert!(res.iter().any(|c| c.content == "hello"), "missing 'hello'");
         assert!(
-            res.iter().any(|c| c.content.contains("hello")),
-            "missing 'hello'"
-        );
-        assert!(
-            res.iter().any(|c| c.content.contains("raw content")),
+            res.iter().any(|c| c.content == "raw content"),
             "missing raw string content"
         );
         let escaped_src = "let s = \"line1\\\\nline2\";";
         print_tree(&Language::rust, escaped_src);
         let res = parse_and_extract(Language::rust, escaped_src);
         assert!(
-            res.iter().any(|c| c.content.contains("line1\\\\nline2")),
+            res.iter().any(|c| c.content == "line1\\\\nline2"),
             "missing 'line1\\\\nline2' with escaped newline"
         );
     }
@@ -591,7 +384,7 @@ mod tests {
         print_tree(&Language::markdown, link);
         let res = parse_and_extract(Language::markdown, link);
         assert!(
-            res.iter().any(|c| c.content.contains("./public/image.png")),
+            res.iter().any(|c| c.content == "./public/image.png"),
             "missing link destination"
         );
         let text_in_quotes = "some text and `./public/image1.png`\nmore text and './public/image2.png'\n even more and \"./public/image3.png\"";
@@ -599,29 +392,23 @@ mod tests {
         let res = parse_and_extract(Language::markdown, text_in_quotes);
         eprintln!("{:?}", res);
         assert!(
-            res.iter()
-                .any(|c| c.content.contains("./public/image1.png")),
+            res.iter().any(|c| c.content == "./public/image1.png"),
             "missing path in code span"
         );
         assert!(
-            res.iter()
-                .any(|c| c.content.contains("./public/image2.png")),
+            res.iter().any(|c| c.content == "./public/image2.png"),
             "missing path in code span"
         );
         assert!(
-            res.iter()
-                .any(|c| c.content.contains("./public/image3.png")),
+            res.iter().any(|c| c.content == "./public/image3.png"),
             "missing path in code span"
         );
         let text_in_starts = "some text and *bold* and **strong**";
         print_tree(&Language::markdown, text_in_starts);
         let res = parse_and_extract(Language::markdown, text_in_starts);
+        assert!(res.iter().any(|c| c.content == "bold"), "missing bold text");
         assert!(
-            res.iter().any(|c| c.content.contains("bold")),
-            "missing bold text"
-        );
-        assert!(
-            res.iter().any(|c| c.content.contains("strong")),
+            res.iter().any(|c| c.content == "strong"),
             "missing strong text"
         );
         let common_path_in_text = r#"
@@ -634,8 +421,7 @@ cd ./extensions/vscode/
         print_tree(&Language::markdown, common_path_in_text);
         let res = parse_and_extract(Language::markdown, common_path_in_text);
         assert!(
-            res.iter()
-                .any(|c| c.content.contains("./extensions/vscode/")),
+            res.iter().any(|c| c.content == "./extensions/vscode/"),
             "missing path in code block"
         );
         let complicated_case = r#"
@@ -652,18 +438,98 @@ The **Path Server** project is organized in mono-repository structure with core 
 - The **Zed Extension** is located in `./extensions/zed`.
 - The **VS Code** is located in `./extensions/vscode`.
 
+> Quote: ./extensions/vscode/more
         "#;
         print_tree(&Language::markdown, complicated_case);
         let res = parse_and_extract(Language::markdown, complicated_case);
         eprintln!("{:?}", res);
         assert!(
-            res.iter().any(|c| c.content.contains("./extensions/zed")),
+            res.iter().any(|c| c.content == "./extensions/zed"),
             "missing path in Zed extension"
         );
         assert!(
-            res.iter()
-                .any(|c| c.content.contains("./extensions/vscode")),
+            res.iter().any(|c| c.content == "./extensions/vscode"),
             "missing path in VS Code extension"
         );
+        assert!(
+            res.iter().any(|c| c.content == "./extensions/vscode/more"),
+            "missing path in quote"
+        );
+        let md_with_html = r#"
+# Project Timer
+
+Project Timer is a lightweight VS Code extension that tracks the time you spend on your projects. It provides detailed insights into your productivity by analyzing your coding activity by dates, programming languages and specific files.
+
+<div align="center">
+    <img src="./resources/demo.gif" alt="demo" style="width: 600px">
+</div>
+"#;
+        print_tree(&Language::markdown, md_with_html);
+        let res = parse_and_extract(Language::markdown, md_with_html);
+        eprintln!("{:?}", res);
+        assert!(
+            res.iter().any(|c| c.content == "./resources/demo.gif"),
+            "missing path in HTML block"
+        );
+    }
+
+    #[test]
+    fn test_html_extract_string() {
+        let simple = r#"    <script src="echarts.min.js"></script>"#;
+        print_tree(&Language::html, simple);
+        let res = parse_and_extract(Language::html, simple);
+        eprintln!("{:?}", res);
+        assert!(res.iter().any(|c| c.content == "echarts.min.js"));
+        let html = r#"
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <script src="echarts.min.js"></script>
+    <link rel="stylesheet" href="statistics.css">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+</head>
+
+<body>
+<h1>Title</h1>
+<div>Some content include a path ./extension.toml</div>
+</body>
+        "#;
+        print_tree(&Language::html, html);
+        let res = parse_and_extract(Language::html, html);
+        eprintln!("{:?}", res);
+        assert!(res.iter().any(|c| c.content == "echarts.min.js"));
+        assert!(res.iter().any(|c| c.content == "statistics.css"));
+        assert!(res.iter().any(|c| c.content == "./extension.toml"));
+    }
+
+    #[test]
+    fn test_c_extract_string() {
+        let str_with_escaped = r#"char *str = "Hello, \"World\"!";"#;
+        print_tree(&Language::c, str_with_escaped);
+        let res = parse_and_extract(Language::c, str_with_escaped);
+        eprintln!("{:?}", res);
+        assert!(res.iter().any(|c| c.content == "Hello, \\\"World\\\"!"));
+
+        let path_in_include = r#"#include "path/to/header.h""#;
+        print_tree(&Language::c, path_in_include);
+        let res = parse_and_extract(Language::c, path_in_include);
+        eprintln!("{:?}", res);
+        assert!(res.iter().any(|c| c.content == "path/to/header.h"));
+    }
+
+    #[test]
+    fn test_cpp_extract_string() {
+        let str_with_escaped = r#"std::string str = "Hello, \"World\"!";"#;
+        print_tree(&Language::c_plus_plus, str_with_escaped);
+        let res = parse_and_extract(Language::c_plus_plus, str_with_escaped);
+        eprintln!("{:?}", res);
+        assert!(res.iter().any(|c| c.content == "Hello, \\\"World\\\"!"));
+
+        let path_in_include = r#"#include "path/to/header.h""#;
+        print_tree(&Language::c_plus_plus, path_in_include);
+        let res = parse_and_extract(Language::c_plus_plus, path_in_include);
+        eprintln!("{:?}", res);
+        assert!(res.iter().any(|c| c.content == "path/to/header.h"));
     }
 }

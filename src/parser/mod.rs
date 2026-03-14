@@ -1,13 +1,10 @@
-mod extractor;
 mod line;
 mod path;
-mod utils;
+mod tree_sitter;
 
-use utils::*;
-
-pub use extractor::{new_tree, update_tree};
 pub use line::{parse_line, separate_prefix};
 pub use path::parse_document;
+pub use tree_sitter::{new_tree, update_tree};
 
 /// Represents a parsed string in the source code with its range
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -100,6 +97,47 @@ impl PathCandidate {
                 }
             }
         }
+    }
+
+    pub fn split(&self, content: &str, delimiter: &[char]) -> Vec<PathCandidate> {
+        let mut results = Vec::new();
+        let mut last_pos = 0;
+
+        while let Some(pos) = content[last_pos..].find(|c| delimiter.contains(&c)) {
+            let end = last_pos + pos;
+            if end > last_pos {
+                let sub_content = &content[last_pos..end];
+                if sub_content.contains('/') || sub_content.contains('\\') {
+                    let trimmed = PathCandidate {
+                        content: sub_content.to_string(),
+                        start_byte: self.start_byte + last_pos,
+                        end_byte: self.start_byte + end,
+                    }
+                    .trim();
+                    if !trimmed.content.is_empty() {
+                        results.push(trimmed);
+                    }
+                }
+            }
+            last_pos = end + 1;
+        }
+
+        // process last part
+        if last_pos < content.len() {
+            let sub_content = &content[last_pos..];
+            if sub_content.contains('/') || sub_content.contains('\\') {
+                let trimmed = PathCandidate {
+                    content: sub_content.to_string(),
+                    start_byte: self.start_byte + last_pos,
+                    end_byte: self.start_byte + content.len(),
+                }
+                .trim();
+                if !trimmed.content.is_empty() {
+                    results.push(trimmed);
+                }
+            }
+        }
+        results
     }
 }
 
