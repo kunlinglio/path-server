@@ -2,7 +2,7 @@
   "name": "path-server",
   "displayName": "Path Server",
   "description": "Fast, lightweight path autocomplete provided by Path Server",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "engines": {
     "vscode": "^1.75.0"
   },
