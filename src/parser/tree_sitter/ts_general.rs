@@ -13,6 +13,8 @@ pub fn extract_strings(
         Language::javascript,
         Language::python,
         Language::rust,
+        Language::c,
+        Language::c_plus_plus,
     ];
     assert!(compatible_languages.contains(language));
 
@@ -89,7 +91,8 @@ fn is_string_node(node: &tree_sitter::Node, language: &Language) -> bool {
         }
         Language::python => kind == "string",
         Language::rust => kind == "string_literal" || kind == "raw_string_literal",
-        _ => false,
+        Language::c | Language::c_plus_plus => kind == "string_literal",
+        _ => unreachable!("is_string_node called with unsupported language"),
     }
 }
 
@@ -100,6 +103,7 @@ fn is_string_fragment_node(node: &tree_sitter::Node, language: &Language) -> boo
         Language::javascript | Language::typescript => kind == "string_fragment",
         Language::python => kind == "string_content",
         Language::rust => kind == "string_content",
+        Language::c | Language::c_plus_plus => kind == "string_content",
         _ => unreachable!("is_string_fragment_node called with unsupported language"),
     }
 }
@@ -112,6 +116,7 @@ fn is_escaped_character_node(node: &tree_sitter::Node, language: &Language) -> b
         Language::javascript | Language::typescript => kind == "escape_sequence",
         Language::python => kind == "escape_sequence",
         Language::rust => kind == "escape_sequence",
+        Language::c | Language::c_plus_plus => kind == "escape_sequence",
         _ => unreachable!("is_escaped_character_node called with unsupported language"),
     }
 }

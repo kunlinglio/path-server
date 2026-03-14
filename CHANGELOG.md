@@ -8,7 +8,7 @@ All notable changes to the Path Server will be documented in this file.
 - **Core**: Fixed an issue where raw string in rust may not extract correctly.
 
 ## Added
-- **Core**: Add tree-sitter html support.
+- **Core**: Add tree-sitter HTML, C, and C++ support.
 
 ## [0.5.1] - 2026-03-12
 ### Added

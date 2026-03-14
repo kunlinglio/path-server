@@ -20,6 +20,8 @@ pub mod ts_languages {
     static MD_LANGUAGE: OnceLock<tree_sitter::Language> = OnceLock::new();
     static MD_INLINE_LANGUAGE: OnceLock<tree_sitter::Language> = OnceLock::new();
     static HTML_LANGUAGE: OnceLock<tree_sitter::Language> = OnceLock::new();
+    static C_LANGUAGE: OnceLock<tree_sitter::Language> = OnceLock::new();
+    static CPP_LANGUAGE: OnceLock<tree_sitter::Language> = OnceLock::new();
 
     pub fn get_js_language() -> tree_sitter::Language {
         JS_LANGUAGE
@@ -63,6 +65,18 @@ pub mod ts_languages {
             .clone()
     }
 
+    pub fn get_c_language() -> tree_sitter::Language {
+        C_LANGUAGE
+            .get_or_init(|| tree_sitter_c::LANGUAGE.into())
+            .clone()
+    }
+
+    pub fn get_cpp_language() -> tree_sitter::Language {
+        CPP_LANGUAGE
+            .get_or_init(|| tree_sitter_cpp::LANGUAGE.into())
+            .clone()
+    }
+
     /// Convert from Language, return None if not supported
     pub fn from_language(language: &Language) -> Option<tree_sitter::Language> {
         match language {
@@ -72,6 +86,8 @@ pub mod ts_languages {
             Language::rust => Some(get_rust_language()),
             Language::markdown => Some(get_md_language()),
             Language::html => Some(get_html_language()),
+            Language::c => Some(get_c_language()),
+            Language::c_plus_plus => Some(get_cpp_language()),
             _ => None,
         }
     }
@@ -147,13 +163,16 @@ pub fn extract_strings(document: &Document) -> PathServerResult<Option<Vec<PathC
             &tree.root_node(),
             &document.language,
         ))),
-        Language::javascript | Language::typescript | Language::python | Language::rust => {
-            Ok(Some(ts_general::extract_strings(
-                &document.text,
-                &tree.root_node(),
-                &document.language,
-            )))
-        }
+        Language::javascript
+        | Language::typescript
+        | Language::python
+        | Language::rust
+        | Language::c
+        | Language::c_plus_plus => Ok(Some(ts_general::extract_strings(
+            &document.text,
+            &tree.root_node(),
+            &document.language,
+        ))),
         _ => unreachable!("Unsupported language: {}", document.language),
     }
 }
@@ -485,5 +504,35 @@ Project Timer is a lightweight VS Code extension that tracks the time you spend 
         assert!(res.iter().any(|c| c.content == "echarts.min.js"));
         assert!(res.iter().any(|c| c.content == "statistics.css"));
         assert!(res.iter().any(|c| c.content == "./extension.toml"));
+    }
+
+    #[test]
+    fn test_c_extract_string() {
+        let str_with_escaped = r#"char *str = "Hello, \"World\"!";"#;
+        print_tree(&Language::c, str_with_escaped);
+        let res = parse_and_extract(Language::c, str_with_escaped);
+        eprintln!("{:?}", res);
+        assert!(res.iter().any(|c| c.content == "Hello, \\\"World\\\"!"));
+
+        let path_in_include = r#"#include "path/to/header.h""#;
+        print_tree(&Language::c, path_in_include);
+        let res = parse_and_extract(Language::c, path_in_include);
+        eprintln!("{:?}", res);
+        assert!(res.iter().any(|c| c.content == "path/to/header.h"));
+    }
+
+    #[test]
+    fn test_cpp_extract_string() {
+        let str_with_escaped = r#"std::string str = "Hello, \"World\"!";"#;
+        print_tree(&Language::c_plus_plus, str_with_escaped);
+        let res = parse_and_extract(Language::c_plus_plus, str_with_escaped);
+        eprintln!("{:?}", res);
+        assert!(res.iter().any(|c| c.content == "Hello, \\\"World\\\"!"));
+
+        let path_in_include = r#"#include "path/to/header.h""#;
+        print_tree(&Language::c_plus_plus, path_in_include);
+        let res = parse_and_extract(Language::c_plus_plus, path_in_include);
+        eprintln!("{:?}", res);
+        assert!(res.iter().any(|c| c.content == "path/to/header.h"));
     }
 }
