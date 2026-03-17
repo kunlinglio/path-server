@@ -7,7 +7,7 @@ use crate::Config;
 use crate::document::Document;
 use crate::error::*;
 use crate::fs;
-use crate::resolver::resolve_at_pos;
+use crate::resolver;
 
 pub async fn provide_definition(
     doc: &Document,
@@ -18,7 +18,7 @@ pub async fn provide_definition(
     workspace_roots: &HashSet<PathBuf>,
 ) -> PathServerResult<Option<lsp_types::GotoDefinitionResponse>> {
     let Some(current_token) =
-        resolve_at_pos(doc, config, workspace_roots, doc_path, (line, character)).await?
+        resolver::resolve_at_pos(doc, config, workspace_roots, doc_path, (line, character)).await?
     else {
         return Ok(None);
     };

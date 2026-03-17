@@ -76,6 +76,7 @@ pub async fn provide_completion(
     } else {
         unreachable!()
     };
+
     Ok(filter(
         completions,
         completion_config.completion.max_results,

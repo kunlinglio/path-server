@@ -7,7 +7,7 @@ use crate::config::Config;
 use crate::document::Document;
 use crate::error::*;
 use crate::fs;
-use crate::resolver::resolve_all;
+use crate::resolver;
 
 pub async fn provide_document_links(
     doc: &Document,
@@ -18,7 +18,7 @@ pub async fn provide_document_links(
     let client = get_client().await;
     assert!(client.support_document_link);
     assert!(config.highlight.enable); // these should be checked by server
-    let tokens = resolve_all(doc, config, workspace_roots, doc_path).await?;
+    let tokens = resolver::resolve_all(doc, config, workspace_roots, doc_path).await?;
     let filtered = tokens
         .iter()
         .filter(|t| config.highlight.highlight_directory || !t.is_dir);
