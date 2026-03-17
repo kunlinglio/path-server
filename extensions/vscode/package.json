@@ -7,6 +7,9 @@
     "vscode": "^1.75.0"
   },
   "readme": "../../README.md",
+  "extensionKind": [
+    "workspace"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/kunlinglio/path-server.git"

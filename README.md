@@ -112,7 +112,7 @@ You can customize Path Server's behavior via your editor's settings.
 - [x] Automatically trigger next completion.
 - [x] Implement "Go to Definition" for file paths.
 - [x] Support path highlight.
-- [ ] Support remote URL.
+- [x] Support remote window.
 - [ ] **Zed**: Support all language by use "wildcard" in extension.toml (Waiting for Zed extension api support)
 
 ## Development
