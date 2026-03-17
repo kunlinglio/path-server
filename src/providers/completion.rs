@@ -8,8 +8,8 @@ use tower_lsp::lsp_types;
 use crate::config;
 use crate::error::*;
 use crate::fs;
-use crate::logger::*;
 use crate::parser;
+use crate::{lsp_debug, lsp_warn};
 
 /// The wrapper struct inside this module to store additional information.
 struct CompletionItemInner {
@@ -24,10 +24,11 @@ pub async fn provide_completion(
     completion_config: &config::Config,
 ) -> PathServerResult<Vec<lsp_types::CompletionItem>> {
     let (base_dir, partial_name) = parser::separate_prefix(prefix);
-    debug(format!(
+    lsp_debug!(
         "Detected base_dir: '{}', partial_name: '{}'",
-        base_dir, partial_name
-    ))
+        base_dir,
+        partial_name
+    )
     .await;
     let base_dir = expand_tilde(&base_dir)?;
     let base_dir = PathBuf::from(base_dir);
@@ -107,10 +108,10 @@ async fn filter(
     let mut builder = GlobSetBuilder::new();
     for pattern in exclude_patterns {
         let Ok(glob) = Glob::new(pattern) else {
-            warn(format!(
+            lsp_warn!(
                 "Invalid glob pattern in config.completion.exclude: {}, ignoring",
                 pattern
-            ))
+            )
             .await;
             continue;
         };
@@ -119,11 +120,7 @@ async fn filter(
     let exclude_set = match builder.build() {
         Ok(set) => set,
         Err(e) => {
-            warn(format!(
-                "Failed to build exclude set: {}, ignoring exclusions",
-                e
-            ))
-            .await;
+            lsp_warn!("Failed to build exclude set: {}, ignoring exclusions", e).await;
             GlobSet::new(vec![Glob::new("").unwrap()]).unwrap()
         }
     };
@@ -155,15 +152,11 @@ async fn generate_completions(
 ) -> PathServerResult<Vec<CompletionItemInner>> {
     let dir = root.join(base_dir);
     if !fs::exists(&dir).await {
-        debug(format!("Base directory does not exist: {}", dir.display())).await;
+        lsp_debug!("Base directory does not exist: {}", dir.display()).await;
         return Ok(vec![]);
     }
     if !fs::is_dir(&dir).await {
-        debug(format!(
-            "Base directory is not a directory: {}",
-            dir.display()
-        ))
-        .await;
+        lsp_debug!("Base directory is not a directory: {}", dir.display()).await;
         return Ok(vec![]);
     }
 

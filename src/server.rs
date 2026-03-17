@@ -11,9 +11,10 @@ use crate::config;
 use crate::document::Document;
 use crate::error::*;
 use crate::fs::url_to_path;
-use crate::logger::{self, *};
+use crate::logger::{self};
 use crate::parser;
 use crate::providers;
+use crate::{lsp_debug, lsp_error, lsp_info};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -86,10 +87,10 @@ impl tower_lsp::LanguageServer for PathServer {
         &self,
         params: lsp_types::InitializeParams,
     ) -> jsonrpc::Result<lsp_types::InitializeResult> {
-        info("Initializing Path Server".to_string()).await;
+        lsp_info!("Initializing Path Server").await;
         // set editor env
         let client_env = self.parse_client_env(&params);
-        info(format!("Client Env: {}", client_env)).await;
+        lsp_info!("Client Env: {}", client_env).await;
         set_client(client_env).await;
         // for backward compatibility
         if let Some(uri) = params.root_uri {
@@ -105,7 +106,7 @@ impl tower_lsp::LanguageServer for PathServer {
         if let Some(folders) = params.workspace_folders {
             let mut roots = self.workspace_roots.write().await;
             for folder in folders {
-                info(format!("Adding workspace root: {}", folder.uri)).await;
+                lsp_info!("Adding workspace root: {}", folder.uri).await;
                 let root = url_to_path(&folder.uri).map_err(|e| {
                     PathServerError::InvalidPath(format!(
                         "Invalid workspace folder URI: {}, error: {}",
@@ -155,27 +156,27 @@ impl tower_lsp::LanguageServer for PathServer {
     }
 
     async fn initialized(&self, _: lsp_types::InitializedParams) {
-        info("Path Server initialized".to_string()).await;
-        info(format!("Path Server version: {}", VERSION)).await;
+        lsp_info!("Path Server initialized").await;
+        lsp_info!("Path Server version: {}", VERSION).await;
         if cfg!(debug_assertions) {
-            info("Running in debug mode".to_string()).await;
+            lsp_info!("Running in debug mode").await;
         } else {
-            info("Running in release mode".to_string()).await;
+            lsp_info!("Running in release mode").await;
         }
     }
 
     async fn shutdown(&self) -> jsonrpc::Result<()> {
-        info("Shutting down Path Server".to_string()).await;
+        lsp_info!("Shutting down Path Server").await;
         Ok(())
     }
 
     async fn did_change_configuration(&self, _: lsp_types::DidChangeConfigurationParams) {
         let cfg = Arc::new(config::get(&self.client).await);
         *self.config_cache.write().await = Some(cfg);
-        info(format!(
+        lsp_info!(
             "[Config] Configuration changed, update to: {}",
             self.config_cache.read().await.as_ref().unwrap()
-        ))
+        )
         .await;
     }
 
@@ -184,30 +185,30 @@ impl tower_lsp::LanguageServer for PathServer {
         params: lsp_types::DidChangeWorkspaceFoldersParams,
     ) {
         for folder in params.event.added {
-            info(format!("Adding workspace folder: {}", folder.uri)).await;
+            lsp_info!("Adding workspace folder: {}", folder.uri).await;
             let mut roots = self.workspace_roots.write().await;
             let root_result = url_to_path(&folder.uri);
             let Ok(root) = root_result else {
-                error(format!(
+                lsp_error!(
                     "Failed to convert URI to file path: {}, error: {}",
                     folder.uri,
                     root_result.unwrap_err()
-                ))
+                )
                 .await;
                 continue;
             };
             roots.insert(root);
         }
         for folder in params.event.removed {
-            info(format!("Removing workspace folder: {}", folder.uri)).await;
+            lsp_info!("Removing workspace folder: {}", folder.uri).await;
             let mut roots = self.workspace_roots.write().await;
             let root_result = url_to_path(&folder.uri);
             let Ok(root) = root_result else {
-                error(format!(
+                lsp_error!(
                     "Failed to convert URI to file path: {}, error: {}",
                     folder.uri,
                     root_result.unwrap_err()
-                ))
+                )
                 .await;
                 continue;
             };
@@ -216,29 +217,30 @@ impl tower_lsp::LanguageServer for PathServer {
     }
 
     async fn did_open(&self, params: lsp_types::DidOpenTextDocumentParams) {
-        info(format!(
-            "[Document Sync] Opening document: {}, language: {}",
-            params.text_document.uri, params.text_document.language_id
-        ))
+        lsp_info!(
+            "Opening document: {}, language: {}",
+            params.text_document.uri,
+            params.text_document.language_id
+        )
         .await;
         let mut documents = self.documents.write().await;
         let path_res = url_to_path(&params.text_document.uri);
         let Ok(path) = path_res else {
-            error(format!(
+            lsp_error!(
                 "Failed to convert document URI to file path: {}, error: {}",
                 params.text_document.uri,
                 path_res.unwrap_err()
-            ))
+            )
             .await;
             return;
         };
         let doc_res = Document::new(params.text_document.text, &params.text_document.language_id);
         let Ok(doc) = doc_res else {
-            error(format!(
+            lsp_error!(
                 "Failed to create document for: {}, error: {}",
                 params.text_document.uri,
                 doc_res.unwrap_err()
-            ))
+            )
             .await;
             return;
         };
@@ -246,18 +248,18 @@ impl tower_lsp::LanguageServer for PathServer {
     }
 
     async fn did_change(&self, params: lsp_types::DidChangeTextDocumentParams) {
-        info(format!(
+        lsp_info!(
             "[Document Sync] Changing document: {}",
             params.text_document.uri
-        ))
+        )
         .await;
         let path_res = url_to_path(&params.text_document.uri);
         let Ok(path) = path_res else {
-            error(format!(
+            lsp_error!(
                 "Failed to convert document URI to file path: {}, error: {}",
                 params.text_document.uri,
                 path_res.unwrap_err()
-            ))
+            )
             .await;
             return;
         };
@@ -267,10 +269,11 @@ impl tower_lsp::LanguageServer for PathServer {
         for change in params.content_changes.into_iter() {
             let result = doc.apply_change(change);
             if let Err(e) = result {
-                error(format!(
+                lsp_error!(
                     "Failed to apply change to document {}: {}",
-                    params.text_document.uri, e
-                ))
+                    params.text_document.uri,
+                    e
+                )
                 .await;
                 return;
             }
@@ -278,17 +281,17 @@ impl tower_lsp::LanguageServer for PathServer {
     }
 
     async fn did_close(&self, params: lsp_types::DidCloseTextDocumentParams) {
-        info(format!(
+        lsp_info!(
             "[Document Sync] Closing document: {}",
             params.text_document.uri
-        ))
+        )
         .await;
         let path_res = url_to_path(&params.text_document.uri);
         let Ok(path) = path_res else {
-            error(format!(
+            lsp_error!(
                 "Failed to convert document URI to file path: {}",
                 params.text_document.uri
-            ))
+            )
             .await;
             return;
         };
@@ -319,11 +322,7 @@ impl tower_lsp::LanguageServer for PathServer {
 
         // parse the line
         let raw_path = parser::parse_line(&line_prefix);
-        info(format!(
-            "[Completion] Completing for prefix: '{}'",
-            raw_path
-        ))
-        .await;
+        lsp_info!("[Completion] Completing for prefix: '{}'", raw_path).await;
 
         // completion
         let config = self.get_config().await;
@@ -337,18 +336,14 @@ impl tower_lsp::LanguageServer for PathServer {
         let workspace_roots = self.workspace_roots.read().await;
         let completions =
             providers::provide_completion(&raw_path, &workspace_roots, &file_path, &config).await?;
-        info(format!(
-            "[Completion] Generated {} completions",
-            completions.len()
-        ))
-        .await;
-        debug(format!(
+        lsp_info!("[Completion] Generated {} completions", completions.len()).await;
+        lsp_debug!(
             "{:?}",
             completions
                 .iter()
                 .map(|c| c.label.to_owned())
                 .collect::<Vec<_>>()
-        ))
+        )
         .await;
         return Ok(Some(lsp_types::CompletionResponse::Array(completions)));
     }
@@ -360,17 +355,17 @@ impl tower_lsp::LanguageServer for PathServer {
         let config = self.get_config().await;
         let client = get_client().await;
         if !client.support_document_link {
-            info("[Document Link] Client does not support document link".into()).await;
+            lsp_info!("[Document Link] Client does not support document link").await;
             return Ok(None);
         };
         if !config.highlight.enable {
-            info("[Document Link] Highlighting is disabled".into()).await;
+            lsp_info!("[Document Link] Highlighting is disabled").await;
             return Ok(None);
         }
-        info(format!(
+        lsp_info!(
             "[Document Link] Processing document link request for: {}",
             params.text_document.uri
-        ))
+        )
         .await;
         let path = url_to_path(&params.text_document.uri).map_err(|e| {
             PathServerError::InvalidPath(format!(
@@ -389,18 +384,14 @@ impl tower_lsp::LanguageServer for PathServer {
         let workspace_roots = self.workspace_roots.read().await;
         let links =
             providers::provide_document_links(doc, &path, &config, &workspace_roots).await?;
-        info(format!(
-            "[Document Link] Generated {} document links",
-            links.len()
-        ))
-        .await;
-        debug(format!(
+        lsp_info!("[Document Link] Generated {} document links", links.len()).await;
+        lsp_debug!(
             "{:?}",
             links
                 .iter()
                 .map(|l| l.target.to_owned())
                 .collect::<Vec<_>>()
-        ))
+        )
         .await;
         Ok(Some(links))
     }
@@ -409,12 +400,12 @@ impl tower_lsp::LanguageServer for PathServer {
         &self,
         params: lsp_types::GotoDefinitionParams,
     ) -> jsonrpc::Result<Option<lsp_types::GotoDefinitionResponse>> {
-        info(format!(
+        lsp_info!(
             "[Goto Definition] Processing goto definition request for: {} {}:{}",
             params.text_document_position_params.text_document.uri,
             params.text_document_position_params.position.line,
             params.text_document_position_params.position.character
-        ))
+        )
         .await;
         let line = params.text_document_position_params.position.line as usize;
         let character = params.text_document_position_params.position.character as usize;
@@ -443,18 +434,14 @@ impl tower_lsp::LanguageServer for PathServer {
             let lsp_types::GotoDefinitionResponse::Link(definition) = &definition else {
                 unreachable!("Definition is not a link");
             };
-            info(format!(
+            lsp_info!(
                 "[Goto Definition] Generated definition to: {}",
                 definition[0].target_uri
-            ))
+            )
             .await;
-            debug(format!(
-                "[Goto Definition] Definition details: {:?}",
-                definition
-            ))
-            .await;
+            lsp_debug!("[Goto Definition] Definition details: {:?}", definition).await;
         } else {
-            info("[Goto Definition] No definition found".into()).await;
+            lsp_info!("[Goto Definition] No definition found").await;
         }
         Ok(definition)
     }
@@ -463,17 +450,17 @@ impl tower_lsp::LanguageServer for PathServer {
         &self,
         params: lsp_types::HoverParams,
     ) -> jsonrpc::Result<Option<lsp_types::Hover>> {
-        info(format!(
+        lsp_info!(
             "[Hover] Processing hover request for: {} {}:{}",
             params.text_document_position_params.text_document.uri,
             params.text_document_position_params.position.line,
             params.text_document_position_params.position.character
-        ))
+        )
         .await;
         let client = get_client().await;
         let config = self.get_config().await;
         if client.support_document_link && config.highlight.enable {
-            info("[Hover] Client support document link and highlight is enabled, provide nothing to avoid duplicated hover item".into()).await;
+            lsp_info!("[Hover] Client support document link and highlight is enabled, provide nothing to avoid duplicated hover item").await;
             return Ok(None);
         };
         let line = params.text_document_position_params.position.line as usize;
@@ -498,13 +485,9 @@ impl tower_lsp::LanguageServer for PathServer {
             providers::provide_hover(doc, &path, line, character, &config, &workspace_roots)
                 .await?;
         if let Some(hover) = &hover {
-            info(format!(
-                "[Hover] Generated hover content: {:?}",
-                hover.contents
-            ))
-            .await;
+            lsp_info!("[Hover] Generated hover content: {:?}", hover.contents).await;
         } else {
-            info("[Hover] No hover content found".into()).await;
+            lsp_info!("[Hover] No hover content found").await;
         };
         Ok(hover)
     }

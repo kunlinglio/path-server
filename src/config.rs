@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use tower_lsp::lsp_types;
 
 use crate::error::*;
-use crate::logger::*;
+use crate::lsp_error;
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -160,10 +160,10 @@ pub async fn get(client: &tower_lsp::Client) -> Config {
         }])
         .await;
     let Ok(user_configs) = user_configs else {
-        error(format!(
+        lsp_error!(
             "Failed to get user configs: {}, use default config",
             user_configs.unwrap_err()
-        ))
+        )
         .await;
         return Config::default();
     };
@@ -173,10 +173,10 @@ pub async fn get(client: &tower_lsp::Client) -> Config {
 
     let merge_res = merge_configs(Config::default(), user_configs);
     let Ok(config) = merge_res else {
-        error(format!(
+        lsp_error!(
             "Failed to merge configs: {}, use default config",
             merge_res.unwrap_err()
-        ))
+        )
         .await;
         return Config::default();
     };
