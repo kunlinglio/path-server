@@ -107,6 +107,13 @@ impl tower_lsp_server::LanguageServer for PathServer {
         let client_env = self.parse_client_env(&params);
         lsp_info!("Client Env: {}", client_env).await;
         set_client(client_env).await;
+        // get workspace roots
+        // for backward compatibility
+        #[allow(deprecated)]
+        if let Some(uri) = params.root_uri {
+            let mut roots = self.workspace_roots.write().await;
+            roots.insert(uri);
+        }
         if let Some(folders) = params.workspace_folders {
             let mut roots = self.workspace_roots.write().await;
             for folder in folders {
