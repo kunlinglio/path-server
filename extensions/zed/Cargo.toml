@@ -1,6 +1,6 @@
 [package]
 name = "path-server"
-version = "0.5.2"
+version = "0.5.3"
 edition = "2024"
 license = "Apache-2.0"
 description = "Path Intellisense like extension for zed, provides fast, real-time file path autocompletion powered by Path Server."
