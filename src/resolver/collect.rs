@@ -11,8 +11,6 @@ use crate::parser::{PathCandidate, parse_document};
 
 use super::{ResolvedPath, ResolvedPathCache};
 
-const MIN_PATH_LENGTH: usize = 2;
-
 pub async fn resolve_all(
     document: &Document,
     config: &Config,
@@ -61,7 +59,6 @@ async fn compute_tokens(
         .await?
         .into_iter()
         .flatten()
-        .filter(|token| token.length() >= MIN_PATH_LENGTH)
         .collect();
     Ok(tokens)
 }

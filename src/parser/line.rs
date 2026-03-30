@@ -65,6 +65,32 @@ impl LineParser {
         }
     }
 
+    fn peek(&self) -> Option<char> {
+        self.rev_content.get(self.cursor).copied().map(|(_, c)| c)
+    }
+
+    fn peek_prev(&self) -> Option<char> {
+        if self.cursor == 0 {
+            None
+        } else {
+            self.rev_content
+                .get(self.cursor - 1)
+                .copied()
+                .map(|(_, c)| c)
+        }
+    }
+
+    fn peek_prev_prev(&self) -> Option<char> {
+        if self.cursor < 2 {
+            None
+        } else {
+            self.rev_content
+                .get(self.cursor - 2)
+                .copied()
+                .map(|(_, c)| c)
+        }
+    }
+
     fn next(&mut self) -> Option<(usize, char)> {
         let res = self.rev_content.get(self.cursor).copied();
         if res.is_some() {
@@ -90,41 +116,64 @@ impl LineParser {
                 break_ = true;
                 break;
             }
-            if ['\0', '\t', '\n'].contains(&c) {
-                // terminals
-                break_ = true;
-                break;
-            } else if self.in_disk_identifier {
+            if self.in_disk_identifier {
                 if c.is_ascii_alphabetic() {
                     candidates.push((self.confidence, self.construct_candidate(self.cursor)));
-                    break_ = true;
-                    break;
                 } else {
                     to_sync!(lsp_warn!(
                         "Unexpected character '{}' after disk identifier in path parsing",
                         c
                     ));
+                }
+                break_ = true;
+                break;
+            }
+            match c {
+                '\0' | '\t' | '\n' | '\r' => {
+                    // terminals
                     break_ = true;
                     break;
                 }
-            } else if c == ':' {
-                if self.in_disk_identifier {
-                    to_sync!(lsp_warn!(
-                        "Unexpected ':' in path parsing after disk identifier"
-                    ));
-                    break_ = true;
-                    break;
-                } else {
-                    self.in_disk_identifier = true;
-                };
-            } else if ['\'', '"', ' ', '[', '(', '<', '>', '|', '?', '*'].contains(&c) {
-                // decrease confidence
-                candidates.push((self.confidence, self.construct_candidate(self.cursor - 1)));
-                self.confidence -= 1;
-            } else if ['/', '\\'].contains(&c) {
-                // increase confidence
-                candidates.push((self.confidence, self.construct_candidate(self.cursor)));
-                self.confidence += 1;
+                ':' => {
+                    if !matches!(self.peek(), Some(next_c) if next_c.is_ascii_alphabetic()) {
+                        // next char is not a drive letter, treat ':' as normal char
+                        continue;
+                    } else if self.in_disk_identifier {
+                        to_sync!(lsp_warn!(
+                            "Unexpected ':' in path parsing after disk identifier"
+                        ));
+                        break_ = true;
+                        break;
+                    } else {
+                        self.in_disk_identifier = true;
+                    };
+                }
+                '\'' | '"' | ' ' | '[' | '(' | '<' | '>' | '|' | '?' | '*' => {
+                    // decrease confidence
+                    candidates.push((self.confidence, self.construct_candidate(self.cursor - 1)));
+                    self.confidence -= 1;
+                }
+                '/' | '\\' => {
+                    // increase confidence
+                    candidates.push((self.confidence, self.construct_candidate(self.cursor)));
+                    self.confidence += 1;
+                }
+                '.' => {
+                    if matches!(self.peek_prev(), Some('/' | '\\'))
+                        && !matches!(self.peek(), Some('.'))
+                    {
+                        // `./` or `.\`
+                        candidates.push((self.confidence, self.construct_candidate(self.cursor)));
+                    } else if matches!(self.peek_prev_prev(), Some('/' | '\\'))
+                        && matches!(self.peek_prev(), Some('.'))
+                    {
+                        // `../` or `..\`
+                        candidates.push((self.confidence, self.construct_candidate(self.cursor)));
+                    }
+                }
+                _ => {
+                    continue;
+                }
             }
         }
         if !break_ {
@@ -295,5 +344,10 @@ mod test {
             parse_line(&"let f = \"./exclude_dir/".to_owned())[0],
             "./exclude_dir/".to_owned()
         );
+    }
+    #[test]
+    fn test_near_paths() {
+        assert!(parse_line("Error at/var/log/app.log").contains(&"/var/log/app.log".to_owned()));
+        assert!(parse_line("See config at./config.yaml").contains(&"./config.yaml".to_owned()));
     }
 }

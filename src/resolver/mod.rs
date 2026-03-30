@@ -22,9 +22,6 @@ impl ResolvedPath {
     pub fn intersects(&self, other: &ResolvedPath) -> bool {
         Self::pos_compare(self.start, other.end) && Self::pos_compare(other.start, self.end)
     }
-    pub fn length(&self) -> usize {
-        self.target.to_str().map(|s| s.len()).unwrap_or(0)
-    }
 }
 
 #[derive(Debug)]
