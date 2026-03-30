@@ -91,10 +91,10 @@ async fn filter_exist_path(
                             let path = &path;
                             let candidate = &candidate;
                             async move {
-                                let full_path = base_path.join(&path);
+                                let full_path = base_path.join(path);
                                 if fs::exists(&full_path).await {
                                     PathServerResult::Ok(Some(
-                                        candidate_to_resolved(&candidate, &full_path, document)
+                                        candidate_to_resolved(candidate, &full_path, document)
                                             .await?,
                                     ))
                                 } else {

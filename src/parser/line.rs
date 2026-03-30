@@ -193,12 +193,10 @@ pub fn separate_prefix(mut prefix: String) -> (String, String) {
         let partial_name = prefix[split_pos..].to_string();
         prefix.truncate(split_pos);
         (prefix, partial_name)
+    } else if prefix.is_empty() {
+        ("./".to_string(), "".to_string())
     } else {
-        if prefix.is_empty() {
-            ("./".to_string(), "".to_string())
-        } else {
-            ("./".to_string(), prefix)
-        }
+        ("./".to_string(), prefix)
     }
 }
 
