@@ -5,6 +5,7 @@ All notable changes to the Path Server will be documented in this file.
 ## [Unreleased]
 ### Added
 - **Core**: Added tree-sitter dockerfile support.
+- **Core**: Added tree-sitter supported log when opening a document.
 
 ### Fixed
 - **Core**: Removed unexpected log print when toggle completion.

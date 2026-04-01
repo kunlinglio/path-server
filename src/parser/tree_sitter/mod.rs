@@ -104,6 +104,11 @@ pub mod ts_languages {
     }
 }
 
+pub fn tree_sitter_supported(language: &str) -> bool {
+    let language = Language::from_id(language);
+    ts_languages::from_language(&language).is_some()
+}
+
 pub fn new_tree(document: &Document) -> PathServerResult<Option<tree_sitter::Tree>> {
     let Some(ts_language) = ts_languages::from_language(&document.language) else {
         return Ok(None);
