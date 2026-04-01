@@ -22,7 +22,7 @@ pub enum Language {
     d,
     dart,
     deno,
-    docker,
+    dockerfile,
     elixir,
     elm,
     emmet,

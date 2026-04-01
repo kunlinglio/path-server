@@ -59,6 +59,10 @@ async fn compute_tokens(
         .await?
         .into_iter()
         .flatten()
+        .filter(|part| {
+            !(part.target.to_str().map(|s| s == "/").unwrap_or(false)
+                || part.target.to_str().map(|s| s == "\\").unwrap_or(false))
+        }) // drop single slash
         .collect();
     Ok(tokens)
 }

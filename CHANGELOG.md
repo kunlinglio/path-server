@@ -2,8 +2,18 @@
 
 All notable changes to the Path Server will be documented in this file.
 
+## [Unreleased]
+### Added
+- **Core**: Added tree-sitter dockerfile support.
+- **Core**: Added tree-sitter supported log when opening a document.
+
+### Fixed
+- **Core**: Removed unexpected log print when toggle completion.
+- **Core**: Fixed an issue where the single slash ("/" or "\\") is still highlighted incorrectly in markdown files.
+
 ## [1.0.0] - 2026-03-30
 Path Server has reached version 1.0.0! This release indicates that the API is now stable and future updates will focus on improvements and bug fixes.
+
 ### Added
 - **VS Code**: Added icon.png with stress color 0x007fd4.
 
@@ -28,13 +38,13 @@ Path Server has reached version 1.0.0! This release indicates that the API is no
 - **Core**: Replaced the long-unmaintained `tower-lsp` dependency with a maintained fork `tower-lsp-server`.
 
 ## [0.5.2] - 2026-03-14
+### Added
+- **Core**: Added tree-sitter HTML, C, and C++ support.
+
 ### Fixed
 - **Core**: Fixed an issue where path in markdown quote and html block may not extract correctly.
 - **Core**: Fixed an issue where raw string in rust may not extract correctly.
 - **Core**: Added deduplication into parser to avoid unnecessary resolving performance costs.
-
-### Added
-- **Core**: Added tree-sitter HTML, C, and C++ support.
 
 ## [0.5.1] - 2026-03-12
 ### Added

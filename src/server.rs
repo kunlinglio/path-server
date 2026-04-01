@@ -12,6 +12,7 @@ use crate::document::Document;
 use crate::error::*;
 use crate::fs;
 use crate::logger::{self};
+use crate::parser::tree_sitter_supported;
 use crate::providers;
 use crate::{lsp_debug, lsp_error, lsp_info};
 
@@ -202,9 +203,14 @@ impl tower_lsp_server::LanguageServer for PathServer {
 
     async fn did_open(&self, params: ls_types::DidOpenTextDocumentParams) {
         lsp_info!(
-            "Opening document: {}, language: {}",
+            "[Document Sync] Opening document: {}, language: {}, tree-sitter: {}",
             params.text_document.uri.as_str(),
-            params.text_document.language_id
+            params.text_document.language_id,
+            if tree_sitter_supported(&params.text_document.language_id) {
+                "supported"
+            } else {
+                "unsupported"
+            }
         )
         .await;
         let mut documents = self.documents.write().await;

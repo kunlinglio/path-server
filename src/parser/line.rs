@@ -4,14 +4,16 @@ use std::vec::Vec;
 
 use crate::{lsp_warn, to_sync};
 
+use super::unescape::unescape;
+
 const INIT_CONFIDENCE: usize = 16;
 
 /// Parses a line of text and extracts the path from it.
 /// Returns a series of candidates, from high priority to low priority.
 pub fn parse_line(line: &str) -> Vec<String> {
     let without_escape = LineParser::new(line).parse();
-    let with_escape = if let Some(escaped) = escape_line(line) {
-        LineParser::new(&escaped).parse()
+    let with_escape = if let Some(unescaped) = unescape(line) {
+        LineParser::new(&unescaped).parse()
     } else {
         vec![]
     };
@@ -29,16 +31,7 @@ pub fn parse_line(line: &str) -> Vec<String> {
             // length desc
             .then_with(|| y.1.len().cmp(&x.1.len()))
     });
-    eprintln!("@@@ Candidates before filtering: {:#?}", sorted);
     sorted.into_iter().map(|(_, s)| s).collect()
-}
-
-fn escape_line(line: &str) -> Option<String> {
-    let line = format!("\"{}\"", line);
-    let Ok(escaped) = serde_json::from_str::<String>(&line) else {
-        return None;
-    };
-    Some(escaped)
 }
 
 struct LineParser {

@@ -1,10 +1,11 @@
 mod line;
 mod path;
 mod tree_sitter;
+mod unescape;
 
 pub use line::{parse_line, separate_prefix};
 pub use path::parse_document;
-pub use tree_sitter::{new_tree, update_tree};
+pub use tree_sitter::{new_tree, tree_sitter_supported, update_tree};
 
 /// Represents a parsed string in the source code with its range
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

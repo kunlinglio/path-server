@@ -1,5 +1,5 @@
 # Path Server
-Path Server is a fast and lightweight Language Server Protocol (LSP) implementation designed to provide path completion, highlight and navigation, offering a **Path Intellisense** experience.
+Path Server is a fast and lightweight Language Server Protocol (LSP) implementation designed to provide path completion, highlight and navigation, offering a **Path Intellisense** experience across different editors.
 
 <div align="center">
     <img src="./assets/demo-vscode.gif" alt="demo" style="width: 600px">
@@ -105,6 +105,7 @@ You can customize Path Server's behavior via your editor's settings.
 ## Resources
 - [GitHub Repository](https://github.com/kunlinglio/path-server)
 - [VS Code Extension](https://marketplace.visualstudio.com/items?itemName=LKL.path-server)
+- [Path Server Icon](https://pictogrammers.com/library/mdi/icon/slash-forward-box/)
 
 ## TODO
 - [x] Support relative and absolute path completion.
