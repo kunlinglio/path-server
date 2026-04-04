@@ -1,5 +1,9 @@
 # Path Server
-Path Server is a fast and lightweight Language Server Protocol (LSP) implementation designed to provide path completion, highlight and navigation, offering a **Path Intellisense** experience across different editors.
+Path Server is an extremely fast and lightweight Language Server Protocol (LSP) server written in Rust, acting as a lightweight and cross-editor replacement for [Path Intellisense](https://github.com/ChristianKohler/PathIntellisense).
+
+**Path Server** automatically **highlights valid file paths** in the editor, **provides completion suggestions** for both relative and absolute paths, and **allows users to jump to the paths** in the editor.
+
+It's currently compatible with **VS Code** and **Zed** (awaiting official review from Zed team) officially, and can be easily ported to any editors that implement the LSP protocol (e.g., Neovim). We are welcome to [issues](https://github.com/kunlinglio/path-server/issues) or [contributions](https://github.com/kunlinglio/path-server/pulls) about your favorite editors.
 
 <div align="center">
     <img src="./assets/demo-vscode.gif" alt="demo" style="width: 600px">
@@ -15,6 +19,7 @@ Path Server is a fast and lightweight Language Server Protocol (LSP) implementat
 ## Features
 - **Path Completion**: Provides real-time suggestions for both relative and absolute paths.
 - **Path highlight and jump**: Automatically detects and underlines valid file paths in the editor, making them clickable for direct navigation.
+- **Highly Customizable**: Offers various configuration options to tailor the behavior to your needs, such as setting base paths for completion, excluding paths with specific patterns, and [more](#configuration).
 - **Fast and Lightweight**: Native-level response speed. Consumes only ~10MB memory with very low CPU usage.
 - **Language Compatibility**: Supports all text files, regardless of programming languages.
 - **Cross IDEs**: Works seamlessly with any editors that support the Language Server Protocol (e.g., VS Code, Zed, Neovim).
@@ -36,7 +41,7 @@ After installing, start typing a path prefix like `./`, `/` or `C:\` in any file
 2. Open Settings and search for `path-server`, or run the command `Path Server: Open Configuration` to customize options.
 3. Toggle the Output panel and select `Path Server Language Server` to view detailed logs.
 
-### Zed
+### Zed (Awaiting Official Review from Zed team)
 1. Search for `Path Server` in the Zed extensions catalog.
 2. Run `zed: open settings file` from the command palette to edit settings. Example:
 
