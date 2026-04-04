@@ -3,6 +3,9 @@
 All notable changes to the Path Server will be documented in this file.
 
 ## [Unreleased]
+### Fixed
+- **Core**: Fixed the missing latency log for hover LSP requests.
+
 ### Improved
 - Refactored the structure of README.md to make it more friendly for new users.
 

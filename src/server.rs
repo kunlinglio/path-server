@@ -450,7 +450,7 @@ impl tower_lsp_server::LanguageServer for PathServer {
         let client = get_client().await;
         let config = self.get_config().await;
         if client.support_document_link && config.highlight.enable {
-            lsp_info!("[Hover] Client support document link and highlight is enabled, provide nothing to avoid duplicated hover item").await;
+            lsp_info!("[Hover] Client support document link and highlight is enabled, provide nothing to avoid duplicated hover item in {:?}", start.elapsed()).await;
             return Ok(None);
         };
         let line = params.text_document_position_params.position.line as usize;
