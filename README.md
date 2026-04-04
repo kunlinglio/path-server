@@ -10,7 +10,7 @@ It's currently compatible with **VS Code** and **Zed** (awaiting official review
 </div>
 
 <details>
-<summary><b>Also available On Zed</b></summary>
+<summary><b>Same experience on Zed</b></summary>
     <div align="center">
         <img src="./assets/demo-zed.gif" alt="demo" style="width: 600px">
     </div>

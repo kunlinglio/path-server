@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Instant;
 
 use tokio::sync::RwLock;
 use tower_lsp_server::jsonrpc;
@@ -102,7 +103,7 @@ impl tower_lsp_server::LanguageServer for PathServer {
         &self,
         params: ls_types::InitializeParams,
     ) -> jsonrpc::Result<ls_types::InitializeResult> {
-        lsp_info!("Initializing Path Server").await;
+        lsp_info!("Initializing Path Server...").await;
         // set editor env
         let client_env = self.parse_client_env(&params);
         lsp_info!("Client Env: {}", client_env).await;
@@ -202,6 +203,7 @@ impl tower_lsp_server::LanguageServer for PathServer {
     }
 
     async fn did_open(&self, params: ls_types::DidOpenTextDocumentParams) {
+        let start = Instant::now();
         lsp_info!(
             "[Document Sync] Opening document: {}, language: {}, tree-sitter: {}",
             params.text_document.uri.as_str(),
@@ -224,10 +226,17 @@ impl tower_lsp_server::LanguageServer for PathServer {
             .await;
             return;
         };
-        documents.insert(params.text_document.uri, doc);
+        documents.insert(params.text_document.uri.clone(), doc);
+        lsp_info!(
+            "[Document Sync] Successfully opened document: {} in {:?}",
+            params.text_document.uri.as_str(),
+            start.elapsed()
+        )
+        .await;
     }
 
     async fn did_change(&self, params: ls_types::DidChangeTextDocumentParams) {
+        let start = Instant::now();
         lsp_info!(
             "[Document Sync] Changing document: {}",
             params.text_document.uri.as_str()
@@ -250,6 +259,12 @@ impl tower_lsp_server::LanguageServer for PathServer {
                 return;
             }
         }
+        lsp_info!(
+            "[Document Sync] Successfully applied changes to document: {} in {:?}",
+            params.text_document.uri.as_str(),
+            start.elapsed()
+        )
+        .await;
     }
 
     async fn did_close(&self, params: ls_types::DidCloseTextDocumentParams) {
@@ -268,6 +283,7 @@ impl tower_lsp_server::LanguageServer for PathServer {
         &self,
         params: ls_types::CompletionParams,
     ) -> jsonrpc::Result<Option<ls_types::CompletionResponse>> {
+        let start = Instant::now();
         // get the line prefix
         let line_number = params.text_document_position.position.line as usize;
         let character = params.text_document_position.position.character as usize;
@@ -291,7 +307,12 @@ impl tower_lsp_server::LanguageServer for PathServer {
             &config,
         )
         .await?;
-        lsp_info!("[Completion] Generated {} completions", completions.len()).await;
+        lsp_info!(
+            "[Completion] Generated {} completions in {:?}",
+            completions.len(),
+            start.elapsed()
+        )
+        .await;
         lsp_debug!(
             "{:?}",
             completions
@@ -307,6 +328,7 @@ impl tower_lsp_server::LanguageServer for PathServer {
         &self,
         params: ls_types::DocumentLinkParams,
     ) -> jsonrpc::Result<Option<Vec<ls_types::DocumentLink>>> {
+        let start = Instant::now();
         let config = self.get_config().await;
         let client = get_client().await;
         if !client.support_document_link {
@@ -334,7 +356,12 @@ impl tower_lsp_server::LanguageServer for PathServer {
         let parent = Self::doc_parent(&params.text_document.uri);
         let links =
             providers::provide_document_links(doc, &parent, &config, &workspace_roots).await?;
-        lsp_info!("[Document Link] Generated {} document links", links.len()).await;
+        lsp_info!(
+            "[Document Link] Generated {} document links in {:?}",
+            links.len(),
+            start.elapsed()
+        )
+        .await;
         lsp_debug!(
             "{:?}",
             links
@@ -350,6 +377,7 @@ impl tower_lsp_server::LanguageServer for PathServer {
         &self,
         params: ls_types::GotoDefinitionParams,
     ) -> jsonrpc::Result<Option<ls_types::GotoDefinitionResponse>> {
+        let start = Instant::now();
         lsp_info!(
             "[Goto Definition] Processing goto definition request for: {} {}:{}",
             params
@@ -387,13 +415,18 @@ impl tower_lsp_server::LanguageServer for PathServer {
                 unreachable!("Definition is not a link");
             };
             lsp_info!(
-                "[Goto Definition] Generated definition to: {}",
-                definition[0].target_uri.as_str()
+                "[Goto Definition] Generated definition to: {} in {:?}",
+                definition[0].target_uri.as_str(),
+                start.elapsed()
             )
             .await;
             lsp_debug!("[Goto Definition] Definition details: {:?}", definition).await;
         } else {
-            lsp_info!("[Goto Definition] No definition found").await;
+            lsp_info!(
+                "[Goto Definition] No definition found in {:?}",
+                start.elapsed()
+            )
+            .await;
         }
         Ok(definition)
     }
@@ -402,6 +435,7 @@ impl tower_lsp_server::LanguageServer for PathServer {
         &self,
         params: ls_types::HoverParams,
     ) -> jsonrpc::Result<Option<ls_types::Hover>> {
+        let start = Instant::now();
         lsp_info!(
             "[Hover] Processing hover request for: {} {}:{}",
             params
@@ -439,9 +473,14 @@ impl tower_lsp_server::LanguageServer for PathServer {
             providers::provide_hover(doc, &parent, line, character, &config, &workspace_roots)
                 .await?;
         if let Some(hover) = &hover {
-            lsp_info!("[Hover] Generated hover content: {:?}", hover.contents).await;
+            lsp_info!(
+                "[Hover] Generated hover content: {:?} in {:?}",
+                hover.contents,
+                start.elapsed()
+            )
+            .await;
         } else {
-            lsp_info!("[Hover] No hover content found").await;
+            lsp_info!("[Hover] No hover content found in {:?}", start.elapsed()).await;
         };
         Ok(hover)
     }
