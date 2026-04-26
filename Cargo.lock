@@ -74,18 +74,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d902e3d592a523def97af8f317b08ce16b7ab854c1985a0c671e6f15cebc236"
 
 [[package]]
-name = "arrayref"
-version = "0.3.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76a2e8124351fda1ef8aaaa3bbd7ebbcb486bbcd4225aca0aa0d84bb2db8fecb"
-
-[[package]]
-name = "arrayvec"
-version = "0.7.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
-
-[[package]]
 name = "async-trait"
 version = "0.1.89"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -103,20 +91,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "843867be96c8daad0d758b57df9392b6d8d271134fce549de6ce169ff98a92af"
 dependencies = [
  "serde_core",
-]
-
-[[package]]
-name = "blake3"
-version = "1.8.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2468ef7d57b3fb7e16b576e8377cdbde2320c60e1491e961d11da40fc4f02a2d"
-dependencies = [
- "arrayref",
- "arrayvec",
- "cc",
- "cfg-if",
- "constant_time_eq",
- "cpufeatures",
 ]
 
 [[package]]
@@ -271,12 +245,6 @@ dependencies = [
  "once_cell",
  "tiny-keccak",
 ]
-
-[[package]]
-name = "constant_time_eq"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d52eff69cd5e647efe296129160853a42795992097e8af39800e1060caeea9b"
 
 [[package]]
 name = "convert_case"
@@ -722,17 +690,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
-name = "mio"
-version = "1.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a69bcab0ad47271a0234d9422b131806bf3968021e5dc9328caf2d4cd58557fc"
-dependencies = [
- "libc",
- "wasi",
- "windows-sys 0.61.2",
-]
-
-[[package]]
 name = "nohash-hasher"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -776,16 +733,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "parking_lot"
-version = "0.12.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "93857453250e3077bd71ff98b6a65ea6621a19bb0f559a85248955ac12c45a1a"
-dependencies = [
- "lock_api",
- "parking_lot_core",
-]
-
-[[package]]
 name = "parking_lot_core"
 version = "0.9.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -802,7 +749,6 @@ dependencies = [
 name = "path-server"
 version = "1.1.1"
 dependencies = [
- "blake3",
  "config",
  "futures",
  "globset",
@@ -1120,16 +1066,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
-name = "signal-hook-registry"
-version = "1.4.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c4db69cba1110affc0e9f7bcd48bbf87b3f4fc7c61fc9155afd4c469eb3d6c1b"
-dependencies = [
- "errno",
- "libc",
-]
-
-[[package]]
 name = "simplelog"
 version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1151,16 +1087,6 @@ name = "smallvec"
 version = "1.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
-
-[[package]]
-name = "socket2"
-version = "0.6.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a766e1110788c36f4fa1c2b71b387a7815aa65f88ce0229841826633d93723e"
-dependencies = [
- "libc",
- "windows-sys 0.61.2",
-]
 
 [[package]]
 name = "streaming-iterator"
@@ -1321,15 +1247,8 @@ version = "1.50.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "27ad5e34374e03cfffefc301becb44e9dc3c17584f414349ebe29ed26661822d"
 dependencies = [
- "bytes",
- "libc",
- "mio",
- "parking_lot",
  "pin-project-lite",
- "signal-hook-registry",
- "socket2",
  "tokio-macros",
- "windows-sys 0.61.2",
 ]
 
 [[package]]

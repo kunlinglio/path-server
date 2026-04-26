@@ -8,6 +8,8 @@ All notable changes to the Path Server will be documented in this file.
 
 ### Improved
 - Refactored the structure of README.md to make it more friendly for new users.
+- Removed dependencies on `blake3`, specified feature flags for `serde` and `tokio` to reduce executable size.
+- Added `cargo audit` to CI to check for vulnerable dependencies.
 
 ## [1.1.1] - 2026-04-04
 ### Added

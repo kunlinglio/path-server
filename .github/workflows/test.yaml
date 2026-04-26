@@ -2,7 +2,7 @@ name: Check and Test
 
 on:
   pull_request:
-    branches: [master]
+    branches: [ master ]
   workflow_call:
 jobs:
   check-rust:
@@ -17,16 +17,21 @@ jobs:
         with:
           components: rustfmt, clippy
 
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@cargo-audit
+
       - name: Check for Path Server
         run: |
           cargo fmt --all -- --check
-          cargo clippy -- -D warnings
+          cargo clippy --all-features -- -D warnings
+          cargo audit --deny warnings
 
       - name: Check for Zed Extension
         working-directory: ./extensions/zed
         run: |
           cargo fmt --all -- --check
-          cargo clippy -- -D warnings
+          cargo clippy --all-features -- -D warnings
+          cargo audit --deny warnings
 
   check-typescript:
     name: Check VSCode Extension
@@ -57,7 +62,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ ubuntu-latest, windows-latest, macos-latest ]
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -66,7 +71,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Run tests in debug mode
-        run: cargo test
+        run: cargo test --all-features
 
       - name: Run tests in release mode
-        run: cargo test --release
+        run: cargo test --release --all-features

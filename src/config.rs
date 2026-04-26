@@ -1,5 +1,7 @@
+use std::collections::hash_map::DefaultHasher;
 use std::convert::TryFrom;
 use std::fmt::Display;
+use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 
 use config::{Config as ConfigLoader, File, FileFormat};
@@ -107,7 +109,7 @@ impl Config {
                 e
             ))
         })?;
-        Ok(blake3::hash(&bytes).to_hex().to_string())
+        Ok(calculate_hash(&bytes).to_string())
     }
 }
 
@@ -150,6 +152,12 @@ impl Display for Config {
                 .unwrap_or_else(|_| "Failed to serialize config".into())
         )
     }
+}
+
+fn calculate_hash<T: Hash>(t: &T) -> u64 {
+    let mut s = DefaultHasher::new();
+    t.hash(&mut s);
+    s.finish()
 }
 
 pub async fn get(client: &tower_lsp_server::Client) -> Config {
