@@ -169,6 +169,10 @@ The core logic is written in Rust (`./src/main.rs`).
     cargo fix --allow-dirty
     cargo clippy --fix --allow-dirty
     ```
+- Audit dependencies:
+    ```bash
+    cargo audit
+    ```
 
 ### Extension: Zed
 Zed extensions are compiled to WASM.

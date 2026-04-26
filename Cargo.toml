@@ -8,7 +8,7 @@ repository = "https://github.com/kunlinglio/path-server"
 readme = "README.md"
 
 [features]
-multi-thread = []
+multi-thread = ["tokio/rt-multi-thread"]
 
 [profile.release]
 strip = true
