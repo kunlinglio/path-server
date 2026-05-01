@@ -85,7 +85,9 @@ jobs:
 
       - name: Package VS Code Extension
         working-directory: ./extensions/vscode
-        run: npm run build -- --target ${{ matrix.vscode_target }} -o ../../dist/path-server_vscode_${{ matrix.vscode_target }}_${{ github.ref_name }}.vsix
+        run: npm run build -- --target ${{ matrix.vscode_target }} -o
+          ../../dist/path-server_vscode_${{ matrix.vscode_target }}_${{
+          github.ref_name }}.vsix
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v7
@@ -94,7 +96,7 @@ jobs:
           path: dist/*
 
   # Step 3: Create Release on GitHub
-  release:
+  release-github:
     name: Create GitHub Release
     needs: build
     runs-on: ubuntu-latest
@@ -120,3 +122,24 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Step 4: Release to crates.io
+  release-crates-io:
+    name: Release to crates.io
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install toml-cli
+        run: cargo install toml-cli
+      - name: Check version
+        run: test "v$(toml get -r Cargo.toml package.version)" = "${{github.ref_name}}"
+      - name: Publish to crates.io
+        run: cargo publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

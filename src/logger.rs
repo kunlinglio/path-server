@@ -9,6 +9,7 @@ pub fn init(client: &tower_lsp_server::Client) {
     let _ = LSP_CLIENT.set(client.clone()); // ignore multi init error
 }
 
+#[doc(hidden)]
 #[macro_export]
 macro_rules! lsp_debug {
     ($($arg:tt)*) => {
@@ -32,6 +33,7 @@ macro_rules! lsp_debug {
     };
 }
 
+#[doc(hidden)]
 #[macro_export]
 macro_rules! lsp_info {
     ($($arg:tt)*) => {
@@ -39,6 +41,7 @@ macro_rules! lsp_info {
     };
 }
 
+#[doc(hidden)]
 #[macro_export]
 macro_rules! lsp_warn {
     ($($arg:tt)*) => {
@@ -49,6 +52,7 @@ macro_rules! lsp_warn {
     };
 }
 
+#[doc(hidden)]
 #[macro_export]
 macro_rules! lsp_error {
     ($($arg:tt)*) => {
@@ -59,6 +63,7 @@ macro_rules! lsp_error {
     };
 }
 
+#[doc(hidden)]
 #[macro_export]
 macro_rules! to_sync {
     ($log_future:expr) => {

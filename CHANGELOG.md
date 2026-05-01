@@ -2,6 +2,12 @@
 
 All notable changes to the Path Server will be documented in this file.
 
+## [Unreleased]
+Path Server is now published to crates.io! You can now install it via `cargo install path-server`.
+
+### Added
+- Added new step to release workflow to publish to crates.io.
+
 ## [1.1.2] - 2026-04-26
 ### Fixed
 - **Core**: Fixed the missing latency log for hover LSP requests.
