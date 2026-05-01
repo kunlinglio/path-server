@@ -3,8 +3,10 @@ name = "path-server"
 version = "1.1.2"
 edition = "2024"
 description = "A fast and lightweight language server for path completion."
-license = "Apache-2.0"
 repository = "https://github.com/kunlinglio/path-server"
+homepage = "https://github.com/kunlinglio/path-server"
+keywords = ["lsp", "language-server", "path", "path-completion"]
+license = "Apache-2.0"
 readme = "README.md"
 
 [features]
