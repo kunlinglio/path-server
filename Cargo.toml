@@ -8,6 +8,7 @@ homepage = "https://github.com/kunlinglio/path-server"
 keywords = ["lsp", "language-server", "path", "path-completion"]
 license = "Apache-2.0"
 readme = "README.md"
+exclude = ["extensions/**", "assets/**", ".github/**", ".vscode/**"]
 
 [features]
 multi-thread = ["tokio/rt-multi-thread"]
