@@ -8,13 +8,16 @@ Path Server is now published to crates.io! You can now install it via `cargo ins
 ### Added
 - Added new step to release workflow to publish to crates.io.
 
+### Improved
+- **VS Code**: Updated icon color from #007fd4 to #0098ff to keep consistent with VS Code's color palette.
+
 ## [1.1.2] - 2026-04-26
 ### Fixed
 - **Core**: Fixed the missing latency log for hover LSP requests.
 
 ### Improved
+- **Core**: Removed dependencies on `blake3`, specified feature flags for `serde` and `tokio` to reduce executable size.
 - Refactored the structure of README.md to make it more friendly for new users.
-- Removed dependencies on `blake3`, specified feature flags for `serde` and `tokio` to reduce executable size.
 - Added `cargo audit` to CI to check for vulnerable dependencies.
 - Updated CI to check and test all features.
 
@@ -38,7 +41,7 @@ Path Server is now published to crates.io! You can now install it via `cargo ins
 Path Server has reached version 1.0.0! This release indicates that the API is now stable and future updates will focus on improvements and bug fixes.
 
 ### Added
-- **VS Code**: Added icon.png with stress color 0x007fd4.
+- **VS Code**: Added icon.png with stress color #007fd4.
 
 ### Fixed
 - **Core**: Fixed Path Server can only highlight the first path in a token.
