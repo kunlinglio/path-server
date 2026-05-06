@@ -26,10 +26,7 @@ export async function activate(context: vscode.ExtensionContext) {
     const serverExecutable: languageClient.Executable = {
         command: serverPath
     };
-    const serverOptions: languageClient.ServerOptions = {
-        run: serverExecutable,
-        debug: serverExecutable
-    };
+    const serverOptions: languageClient.ServerOptions = serverExecutable;
     const clientOptions: languageClient.LanguageClientOptions = {
         documentSelector: [
             { scheme: 'file', language: '*' },

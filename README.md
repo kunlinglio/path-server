@@ -76,6 +76,7 @@ Search for `Path Server` in the Zed extensions catalog and click install.
 For other editors that support LSP, Path Server should be compatible as well. You can follow the instructions below to get started:
 
 1. Install Path Server binary via `cargo install path-server`.
+    > The default version is single-threaded for minimal resource usage. If you prefer with multi-threading support, install by `cargo install path-server --features multi-thread`.
 2. Configure your editor to start the Path Server language server with the command `path-server` and set the communication to use STDIN/STDOUT.
 
 *If there is any issue with the compatibility, please feel free to open an issue or contribute a PR to fix it.*
@@ -129,8 +130,8 @@ Run `zed: open settings file` from the command palette to edit user settings jso
 - [GitHub Repository](https://github.com/kunlinglio/path-server)
 - [VS Code Extension](https://marketplace.visualstudio.com/items?itemName=LKL.path-server)
 - [Path Server Icon](https://pictogrammers.com/library/mdi/icon/slash-forward-box/)
+- [Path Server icon color](https://code.visualstudio.com/brand)
 - [Crates.io](https://crates.io/crates/path-server)
-- [Project Timer icon color](https://code.visualstudio.com/brand)
 
 ## TODO
 - [x] Support relative and absolute path completion.
@@ -187,10 +188,10 @@ The core logic is written in Rust (`./src/main.rs`).
 ### Extension: Zed
 Zed extensions are compiled to WASM.
 
-1. Install Dev Extension:  
+1. Install Dev Extension:
     Open Zed and run command zed: install dev extension.
     Select the zed folder.
-2. View Logs:   
+2. View Logs:
     Open logs to debug LSP communication.
 
 ### Extension: VS Code
@@ -200,7 +201,7 @@ The VS Code extension acts as a client that launches the Rust binary.
     ```bash
     npm install
     ```
-2. Debug:  
+2. Debug:
     Press `F5` or `run Debug`: Select and Start Debugging -> Run Extension.
 
     > This will build the language server automatically and launch a "Extension Development Host" window.
