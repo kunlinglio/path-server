@@ -77,7 +77,7 @@ async fn compute_tokens(
 }
 
 async fn filter_exist_path(
-    candidates: &Vec<PathCandidate>,
+    candidates: &[PathCandidate],
     config: &Config,
     workspace_roots: &[String],
     parent: Option<&String>,
@@ -89,7 +89,7 @@ async fn filter_exist_path(
         if path.is_absolute() {
             if fs::exists(&path).await {
                 PathServerResult::Ok(vec![
-                    candidate_to_resolved(&candidate, &path, document).await?,
+                    candidate_to_resolved(candidate, &path, document).await?,
                 ])
             } else {
                 PathServerResult::Ok(vec![])
