@@ -19,10 +19,10 @@ pub struct Document {
     /// Language if from lsp client
     pub language: Language,
     /// Cached tokens from parser (candidate paths)
-    /// This will never expired until the document content changes
+    /// This will never expire until the document content changes
     pub candidate_path: Mutex<Option<Arc<Vec<Vec<PathCandidate>>>>>,
     /// Cached exists paths (resolved from candidate paths)
-    /// This may expired to avoid file system change
+    /// This may expire to reflect file system changes
     pub resolved_path: Mutex<Option<ResolvedPathCache>>,
     /// Index for line/column -> offset calculations
     index: LineIndex,
