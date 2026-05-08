@@ -1,6 +1,5 @@
 use tower_lsp_server::ls_types;
 
-use crate::client::get_client;
 use crate::config::Config;
 use crate::document::Document;
 use crate::error::*;
@@ -13,9 +12,7 @@ pub async fn provide_document_links(
     config: &Config,
     workspace_roots: &[String],
 ) -> PathServerResult<Vec<ls_types::DocumentLink>> {
-    let client = get_client().await;
-    assert!(client.support_document_link);
-    assert!(config.highlight.enable); // these should be checked by server
+    assert!(config.highlight.enable); // this should be checked by server
     let tokens = resolver::resolve_all(doc, config, workspace_roots, doc_parent).await?;
     let filtered = tokens
         .iter()

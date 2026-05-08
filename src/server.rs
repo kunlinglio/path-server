@@ -1,23 +1,23 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::OnceLock;
 use std::time::Instant;
 
 use tokio::sync::RwLock;
 use tower_lsp_server::jsonrpc;
 use tower_lsp_server::ls_types;
 
-use crate::client::{ClientMetadata, Editor, get_client, set_client};
 use crate::config;
 use crate::document::Document;
+use crate::editor_info::EditorInfo;
 use crate::error::*;
 use crate::fs;
 use crate::logger::{self};
 use crate::parser::tree_sitter_supported;
 use crate::providers;
+use crate::server_info::ServerInfo;
 use crate::{lsp_debug, lsp_error, lsp_info};
-
-const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Debug)]
 pub struct PathServer {
@@ -25,6 +25,8 @@ pub struct PathServer {
     workspace_roots: RwLock<HashSet<ls_types::Uri>>,
     /// file path -> document
     documents: RwLock<HashMap<ls_types::Uri, Document>>,
+    editor_info: OnceLock<EditorInfo>,
+    server_info: OnceLock<ServerInfo>,
     config_cache: RwLock<Option<Arc<config::Config>>>,
 }
 
@@ -35,6 +37,8 @@ impl PathServer {
             client,
             workspace_roots: RwLock::new(HashSet::new()),
             documents: RwLock::new(HashMap::new()),
+            editor_info: OnceLock::new(),
+            server_info: OnceLock::new(),
             config_cache: RwLock::new(None),
         }
     }
@@ -52,33 +56,6 @@ impl PathServer {
         // a hacky way to make test config effect - set it into cache
         let mut guard = self.config_cache.write().await;
         *guard = Some(Arc::new(cfg));
-    }
-
-    pub fn parse_editor_env(&self, params: &ls_types::InitializeParams) -> Editor {
-        let Some(options) = &params.initialization_options else {
-            return Editor::Unknown("unknown".into());
-        };
-        let Some(editor) = options.get("editor") else {
-            return Editor::Unknown("unknown".into());
-        };
-        if let Some(editor_str) = editor.as_str() {
-            return Editor::from(editor_str);
-        }
-        Editor::Unknown("unknown".into())
-    }
-
-    pub fn parse_client_env(&self, params: &ls_types::InitializeParams) -> ClientMetadata {
-        let editor = self.parse_editor_env(params);
-        let support_document_link = params
-            .capabilities
-            .text_document
-            .as_ref()
-            .and_then(|td| td.document_link.clone())
-            .is_some();
-        ClientMetadata {
-            editor,
-            support_document_link,
-        }
     }
 
     pub async fn workspace_paths(&self) -> Vec<String> {
@@ -104,14 +81,18 @@ impl tower_lsp_server::LanguageServer for PathServer {
         params: ls_types::InitializeParams,
     ) -> jsonrpc::Result<ls_types::InitializeResult> {
         lsp_info!("Initializing Path Server...").await;
-        // set editor env
-        let client_env = self.parse_client_env(&params);
-        lsp_info!("Client Env: {}", client_env).await;
-        set_client(client_env).await;
+        // set editor info
+        let editor_info = EditorInfo::from_initialize_params(&params);
+        lsp_info!("Editor Info: {}", editor_info).await;
+        self.editor_info.set(editor_info).unwrap();
+        // set server info
+        let server_info = ServerInfo::new();
+        lsp_info!("Server Info: {}", server_info).await;
+        self.server_info.set(server_info).unwrap();
         // get workspace roots
-        // for backward compatibility
         #[allow(deprecated)]
         if let Some(uri) = params.root_uri {
+            // for backward compatibility
             let mut roots = self.workspace_roots.write().await;
             roots.insert(uri);
         }
@@ -163,12 +144,6 @@ impl tower_lsp_server::LanguageServer for PathServer {
 
     async fn initialized(&self, _: ls_types::InitializedParams) {
         lsp_info!("Path Server initialized").await;
-        lsp_info!("Path Server version: {}", VERSION).await;
-        if cfg!(debug_assertions) {
-            lsp_info!("Running in debug mode").await;
-        } else {
-            lsp_info!("Running in release mode").await;
-        }
     }
 
     async fn shutdown(&self) -> jsonrpc::Result<()> {
@@ -330,8 +305,11 @@ impl tower_lsp_server::LanguageServer for PathServer {
     ) -> jsonrpc::Result<Option<Vec<ls_types::DocumentLink>>> {
         let start = Instant::now();
         let config = self.get_config().await;
-        let client = get_client().await;
-        if !client.support_document_link {
+        let editor_info = self
+            .editor_info
+            .get()
+            .expect("Editor info must be initialized");
+        if !editor_info.support_document_link {
             lsp_info!("[Document Link] Client does not support document link").await;
             return Ok(None);
         };
@@ -447,9 +425,12 @@ impl tower_lsp_server::LanguageServer for PathServer {
             params.text_document_position_params.position.character
         )
         .await;
-        let client = get_client().await;
+        let editor_info = self
+            .editor_info
+            .get()
+            .expect("Editor info must be initialized");
         let config = self.get_config().await;
-        if client.support_document_link && config.highlight.enable {
+        if editor_info.support_document_link && config.highlight.enable {
             lsp_info!("[Hover] Client support document link and highlight is enabled, provide nothing to avoid duplicated hover item in {:?}", start.elapsed()).await;
             return Ok(None);
         };
