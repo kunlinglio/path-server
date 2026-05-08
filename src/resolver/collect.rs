@@ -9,7 +9,7 @@ use crate::error::*;
 use crate::fs;
 use crate::parser::{PathCandidate, parse_document};
 
-use super::{ResolvedPath, ResolvedPathCache};
+use super::{RESOLVE_CACHE_TTL, ResolvedPath, ResolvedPathCache};
 
 pub async fn resolve_all(
     document: &Document,
@@ -17,21 +17,22 @@ pub async fn resolve_all(
     workspace_roots: &[String],
     doc_parent: &Option<String>,
 ) -> PathServerResult<Arc<Vec<ResolvedPath>>> {
-    let mut cache = document.tokens.lock().await;
+    let mut cache = document.resolved_path.lock().await;
     let signature = config.signature()?;
-    if let Some(tokens) = &cache.tokens
+    if let Some(cache) = &*cache
         && cache.config_signature == signature
+        && cache.created_at.elapsed() < RESOLVE_CACHE_TTL
     {
         // hit
-        return Ok(tokens.clone());
+        return Ok(cache.tokens.clone());
     }
     // miss
     let tokens = compute_tokens(document, config, workspace_roots, doc_parent).await?;
     let shared_tokens = Arc::new(tokens);
-    *cache = ResolvedPathCache {
-        tokens: Some(Arc::clone(&shared_tokens)),
-        config_signature: signature,
-    };
+    *cache = Some(ResolvedPathCache::new(
+        Arc::clone(&shared_tokens),
+        signature,
+    ));
     Ok(shared_tokens)
 }
 
@@ -42,20 +43,27 @@ async fn compute_tokens(
     doc_parent: &Option<String>,
 ) -> PathServerResult<Vec<ResolvedPath>> {
     let home = std::env::var("HOME").ok();
+    let path_candidates = if let Some(cache) = &*document.candidate_path.lock().await {
+        // hit
+        cache.clone()
+    } else {
+        // miss
+        let path_candidates: Arc<Vec<Vec<PathCandidate>>> = Arc::new(parse_document(document)?);
+        *document.candidate_path.lock().await = Some(path_candidates.clone());
+        path_candidates
+    };
     let tokens: Vec<ResolvedPath> =
-        future::try_join_all(parse_document(document).into_iter().flatten().map(
-            |candidates| async {
-                filter_exist_path(
-                    candidates,
-                    config,
-                    workspace_roots,
-                    doc_parent.as_ref(),
-                    home.as_ref(),
-                    document,
-                )
-                .await
-            },
-        ))
+        future::try_join_all(path_candidates.iter().map(|candidates| async {
+            filter_exist_path(
+                candidates,
+                config,
+                workspace_roots,
+                doc_parent.as_ref(),
+                home.as_ref(),
+                document,
+            )
+            .await
+        }))
         .await?
         .into_iter()
         .flatten()
@@ -68,19 +76,19 @@ async fn compute_tokens(
 }
 
 async fn filter_exist_path(
-    candidates: Vec<PathCandidate>,
+    candidates: &[PathCandidate],
     config: &Config,
     workspace_roots: &[String],
     parent: Option<&String>,
     home: Option<&String>,
     document: &Document,
 ) -> PathServerResult<Vec<ResolvedPath>> {
-    let resolved = future::try_join_all(candidates.into_iter().map(|candidate| async move {
+    let resolved = future::try_join_all(candidates.iter().map(|candidate| async move {
         let path = PathBuf::from(&candidate.content);
         if path.is_absolute() {
             if fs::exists(&path).await {
                 PathServerResult::Ok(vec![
-                    candidate_to_resolved(&candidate, &path, document).await?,
+                    candidate_to_resolved(candidate, &path, document).await?,
                 ])
             } else {
                 PathServerResult::Ok(vec![])

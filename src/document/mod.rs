@@ -2,11 +2,13 @@ mod language;
 pub use language::Language;
 
 use line_index::{LineIndex, TextSize, WideEncoding, WideLineCol};
+use std::sync::Arc;
 use tokio::sync::Mutex;
 use tower_lsp_server::ls_types;
 use tree_sitter::Tree;
 
 use crate::error::*;
+use crate::parser::PathCandidate;
 use crate::parser::{new_tree, update_tree};
 use crate::resolver::ResolvedPathCache;
 
@@ -16,8 +18,12 @@ pub struct Document {
     pub text: String,
     /// Language if from lsp client
     pub language: Language,
-    /// Tokens cache
-    pub tokens: Mutex<ResolvedPathCache>,
+    /// Cached tokens from parser (candidate paths)
+    /// This will never expire until the document content changes
+    pub candidate_path: Mutex<Option<Arc<Vec<Vec<PathCandidate>>>>>,
+    /// Cached exists paths (resolved from candidate paths)
+    /// This may expire to reflect file system changes
+    pub resolved_path: Mutex<Option<ResolvedPathCache>>,
     /// Index for line/column -> offset calculations
     index: LineIndex,
     /// Tree-sitter AST tree for incremental parsing
@@ -31,7 +37,8 @@ impl Default for Document {
             index: LineIndex::new(""),
             language: Language::Unknown("".into()),
             tree: None,
-            tokens: Mutex::new(ResolvedPathCache::new()),
+            candidate_path: Mutex::new(None),
+            resolved_path: Mutex::new(None),
         }
     }
 }
@@ -43,7 +50,8 @@ impl Document {
             text,
             language: Language::from_id(language_id),
             tree: None,
-            tokens: Mutex::new(ResolvedPathCache::new()),
+            candidate_path: Mutex::new(None),
+            resolved_path: Mutex::new(None),
         };
         doc.tree = new_tree(&doc)?;
         Ok(doc)
@@ -74,7 +82,8 @@ impl Document {
             index: new_index,
             tree: None,
             language: old_document.language.clone(),
-            tokens: Mutex::new(ResolvedPathCache::new()),
+            candidate_path: Mutex::new(None),
+            resolved_path: Mutex::new(None),
         };
 
         // update tree

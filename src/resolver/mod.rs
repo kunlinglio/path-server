@@ -7,6 +7,8 @@ pub use query::resolve_at_pos;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+const RESOLVE_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(10);
+
 #[derive(Debug, Clone)]
 pub struct ResolvedPath {
     pub start: (usize, usize), // (line, character) in utf16
@@ -26,15 +28,18 @@ impl ResolvedPath {
 
 #[derive(Debug)]
 pub struct ResolvedPathCache {
-    tokens: Option<Arc<Vec<ResolvedPath>>>,
+    tokens: Arc<Vec<ResolvedPath>>,
     config_signature: String,
+    /// For expiration
+    created_at: std::time::Instant,
 }
 
 impl ResolvedPathCache {
-    pub fn new() -> Self {
+    pub fn new(tokens: Arc<Vec<ResolvedPath>>, config_signature: String) -> Self {
         Self {
-            tokens: None,
-            config_signature: String::new(),
+            tokens,
+            config_signature,
+            created_at: std::time::Instant::now(),
         }
     }
 }
