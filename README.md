@@ -142,6 +142,7 @@ Run `zed: open settings file` from the command palette to edit user settings jso
 - [x] Support path highlight.
 - [x] Support remote window.
 - [x] Improve path extraction precision.
+- [ ] Support tokenize by `:` in docker-compose.
 - [ ] **Zed**: Support all language by use "wildcard" in extension.toml (Waiting for Zed extension api support)
 
 ## Development
