@@ -9,7 +9,7 @@ pub fn extract_string(document: &Document) -> Option<Vec<PathCandidate>> {
         r#""(?:[^"\\]|\\.)*""#, // match string in double quote, support escaped \"
         r#"'(?:[^'\\]|\\.)*'"#, // match string in single quote, support escaped \'
         r#"`(?:[^`\\]|\\.)*`"#, // match string in back tick, and support escaped \`
-        r#"\S*[/\\]\S*"#, // match token warped by space and contain at least one slash or backslash
+        r#"\S*[/\\]\S*"#, // match token wrapped by space and contain at least one slash or backslash
     ];
     let regex = Regex::new(&string_regexes.join("|"))
         .map_err(|e| PathServerError::Unknown(format!("Failed to compile regex expression: {}", e)))
