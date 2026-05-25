@@ -41,6 +41,11 @@ fn extract_paths_from_string(path_ref: PathCandidate) -> Vec<PathCandidate> {
     // Level 2: the part of string (split by space) is a path or not
     results.extend(path_ref.split(&[' ', '\n']));
 
+    // Level 3: the part of string (split by colon) is a path or not
+    // Handles docker-compose volume mounts (e.g., ./src:/app/src)
+    // and PATH-like environment variables (e.g., /usr/bin:/usr/local/bin)
+    results.extend(path_ref.split(&[':', '：']));
+
     results
 }
 
@@ -85,6 +90,71 @@ mod tests {
         }
         assert!(res.iter().any(|p| p.content == "/etc/nginx.conf"));
         assert!(res.iter().any(|p| p.content == "/var/log/syslog"));
+    }
+
+    #[test]
+    fn test_extract_paths_from_volume_mount() {
+        // docker-compose volume mount: host_path:container_path
+        let candidate = PathCandidate {
+            content: "./src:/app/src".to_string(),
+            start_byte: 0,
+            end_byte: 14,
+        };
+        let res = extract_paths_from_string(candidate);
+        for p in &res {
+            eprintln!("Extracted: {};", p.content);
+        }
+        assert!(res.iter().any(|p| p.content == "./src"));
+        assert!(res.iter().any(|p| p.content == "/app/src"));
+    }
+
+    #[test]
+    fn test_extract_paths_from_absolute_volume_mount() {
+        let candidate = PathCandidate {
+            content: "/host/path:/container/path".to_string(),
+            start_byte: 0,
+            end_byte: 25,
+        };
+        let res = extract_paths_from_string(candidate);
+        for p in &res {
+            eprintln!("Extracted: {};", p.content);
+        }
+        assert!(res.iter().any(|p| p.content == "/host/path"));
+        assert!(res.iter().any(|p| p.content == "/container/path"));
+    }
+
+    #[test]
+    fn test_extract_paths_from_volume_mount_with_readonly() {
+        // docker-compose volume mount with :ro mode flag
+        let candidate = PathCandidate {
+            content: "./data:/app/data:ro".to_string(),
+            start_byte: 0,
+            end_byte: 18,
+        };
+        let res = extract_paths_from_string(candidate);
+        for p in &res {
+            eprintln!("Extracted: {};", p.content);
+        }
+        assert!(res.iter().any(|p| p.content == "./data"));
+        assert!(res.iter().any(|p| p.content == "/app/data"));
+        // "ro" should NOT be extracted (no path separator)
+        assert!(!res.iter().any(|p| p.content == "ro"));
+    }
+
+    #[test]
+    fn test_extract_paths_from_windows_absolute_not_broken() {
+        // Windows absolute path C:\Users\file.txt should not be broken by colon split
+        let candidate = PathCandidate {
+            content: "C:\\Users\\file.txt".to_string(),
+            start_byte: 0,
+            end_byte: 17,
+        };
+        let res = extract_paths_from_string(candidate);
+        for p in &res {
+            eprintln!("Extracted: {};", p.content);
+        }
+        // The whole path should be present
+        assert!(res.iter().any(|p| p.content == "C:\\Users\\file.txt"));
     }
 
     #[test]

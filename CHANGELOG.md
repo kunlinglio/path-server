@@ -5,6 +5,7 @@ All notable changes to the Path Server will be documented in this file.
 ## [Unreleased]
 ### Added
 - **Core**: Added support for parsing bare path tokens delimited by whitespace (e.g., `src/ui/menu.ts` in YAML or other non-string contexts).
+- **Core**: Added support for parsing paths from colon-delimited tokens, enabling docker-compose volume mount path extraction (e.g., `./src:/app/src`).
 
 ### Improved
 - **Core**: Refactored the `ClientMetadata` structure for better logging.
