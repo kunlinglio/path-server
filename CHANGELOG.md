@@ -2,6 +2,13 @@
 
 All notable changes to the Path Server will be documented in this file.
 
+## [Unreleased]
+### Added
+- **Core**: Added support for parsing bare path tokens delimited by whitespace (e.g., `src/ui/menu.ts` in YAML or other non-string contexts).
+
+### Improved
+- **Core**: Refactored the `ClientMetadata` structure for better logging.
+
 ## [1.2.0] - 2026-05-08
 Path Server is now published to crates.io! You can now install it via `cargo install path-server`.
 

@@ -23,6 +23,8 @@ pub enum Language {
     dart,
     deno,
     dockerfile,
+    #[strum(serialize = "dockercompose")]
+    docker_compose,
     elixir,
     elm,
     emmet,
