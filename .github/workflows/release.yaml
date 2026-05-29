@@ -169,3 +169,12 @@ jobs:
           cargo install toml-cli
           test "v$(toml get -r extensions/zed/Cargo.toml package.version)" = "${{github.ref_name}}"
           test "v$(toml get -r extensions/zed/extension.toml version)" = "${{github.ref_name}}"
+
+      - name: Publish to Zed Extension Catalog
+        uses: huacnlee/zed-extension-action@v2
+        with:
+          extension-name: path-server-lsp
+          push-to: kunlinglio/extensions
+        env:
+          # the personal access token should have "repo" & "workflow" scopes
+          COMMITTER_TOKEN: ${{ secrets.COMMITTER_TOKEN }}
