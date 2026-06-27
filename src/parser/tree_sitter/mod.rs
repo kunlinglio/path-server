@@ -176,7 +176,7 @@ pub fn extract_strings(document: &Document) -> PathServerResult<Option<Vec<PathC
         ),
         Language::html => (
             ts_html::extract_strings(&document.text, &tree.root_node(), &document.language),
-            ts_html::extract_comments(&document.text, &tree.root_node(), &document.language),
+            ts_html::extract_comments(&tree.root_node(), &document.language),
         ),
         Language::javascript
         | Language::typescript
@@ -185,16 +185,16 @@ pub fn extract_strings(document: &Document) -> PathServerResult<Option<Vec<PathC
         | Language::c
         | Language::c_plus_plus => (
             ts_general::extract_strings(&document.text, &tree.root_node(), &document.language),
-            ts_general::extract_comments(&document.text, &tree.root_node(), &document.language),
+            ts_general::extract_comments(&tree.root_node(), &document.language),
         ),
         Language::dockerfile => (
             ts_dockerfile::extract_strings(&document.text, &tree.root_node(), &document.language),
-            ts_dockerfile::extract_comments(&document.text, &tree.root_node(), &document.language),
+            ts_dockerfile::extract_comments(&tree.root_node(), &document.language),
         ),
         _ => unreachable!("Unsupported language: {}", document.language),
     };
     let comment_candidates = extract_paths_from_comment_ranges(document, &comment_ranges)?;
-    let all = candidates.into_iter().chain(comment_candidates.into_iter());
+    let all = candidates.into_iter().chain(comment_candidates);
     let deduplicated: HashSet<_> = all.collect();
     Ok(Some(deduplicated.into_iter().collect()))
 }
@@ -219,21 +219,19 @@ fn extract_paths_from_comment_ranges(
             let range = tree_sitter::Range {
                 start_byte: *start,
                 end_byte: *end,
-                start_point: byte_offset_to_point(&document, *start),
-                end_point: byte_offset_to_point(&document, *end),
+                start_point: byte_offset_to_point(document, *start),
+                end_point: byte_offset_to_point(document, *end),
             };
             parser.set_included_ranges(&[range]).map_err(|_| {
                 PathServerError::ParseError("Failed to set included ranges for comment".into())
             })?;
-            if let Some(tree) = parser.parse(&document.text, None) {
-                ts_markdown::extract_strings(&document.text, &tree.root_node())
-            } else {
-                Err(PathServerError::ParseError(
-                    "Failed to parse comment text as markdown".into(),
-                ))
-            }
+            let tree = parser.parse(&document.text, None).ok_or_else(|| {
+                PathServerError::ParseError("Failed to parse comment text as markdown".into())
+            })?;
+            ts_markdown::extract_strings(&document.text, &tree.root_node())
         })
-        .flatten()
+        .collect::<PathServerResult<Vec<_>>>()?
+        .into_iter()
         .flatten()
         .collect())
 }
@@ -413,28 +411,28 @@ const x = 1;"#;
             res.iter().any(|c| c.content == "line1\\\\line2"),
             "missing 'line1\\\\line2' with escaped newline"
         );
-        // Markdown link in JS comment
+        // Markdown link in TS comment
         let src = r#"// See [README](./README.md)
 const x = 1;"#;
-        let res = parse_and_extract(Language::javascript, src);
+        let res = parse_and_extract(Language::typescript, src);
         assert!(
             res.iter().any(|c| c.content == "./README.md"),
-            "missing link destination in JS line comment"
+            "missing link destination in TS line comment"
         );
         let src = r#"/* `./README.md` */
 const x = 1;"#;
-        let res = parse_and_extract(Language::javascript, src);
+        let res = parse_and_extract(Language::typescript, src);
         assert!(
             res.iter().any(|c| c.content == "./README.md"),
-            "missing link destination in JS line comment"
+            "missing link destination in TS line comment"
         );
         // Path in block comment
         let src = r#"/* import from ./lib/helper.js */
 const x = 1;"#;
-        let res = parse_and_extract(Language::javascript, src);
+        let res = parse_and_extract(Language::typescript, src);
         assert!(
             res.iter().any(|c| c.content == "./lib/helper.js"),
-            "missing path in JS block comment"
+            "missing path in TS block comment"
         );
     }
 

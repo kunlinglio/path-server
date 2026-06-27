@@ -7,11 +7,7 @@ use super::PathCandidate;
 use super::super::unescape::unescape;
 
 /// Collect byte ranges of comment nodes in Dockerfile.
-pub fn extract_comments(
-    source: &str,
-    node: &tree_sitter::Node,
-    language: &Language,
-) -> Vec<(usize, usize)> {
+pub fn extract_comments(node: &tree_sitter::Node, language: &Language) -> Vec<(usize, usize)> {
     assert_eq!(language, &Language::dockerfile);
     let mut ranges = Vec::new();
     if node.kind() == "comment" {
@@ -19,7 +15,7 @@ pub fn extract_comments(
     }
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        ranges.extend(extract_comments(source, &child, language));
+        ranges.extend(extract_comments(&child, language));
     }
     ranges
 }
