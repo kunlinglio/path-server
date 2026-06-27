@@ -6,6 +6,7 @@ All notable changes to the Path Server will be documented in this file.
 
 ### Added
 - Added language support assert to tree-sitter parser tests.
+- **Core**: Added support for extracting paths from comments that use markdown syntax.
 - **Core**: Added MDX language support. ([#43](https://github.com/kunlinglio/path-server/pull/43))
 
 ## [1.3.1] - 2026-05-29

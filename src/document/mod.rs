@@ -122,8 +122,8 @@ impl Document {
         utf16_position_to_offset(&self.index, line, character)
     }
 
-    pub fn offset_to_utf8_pos(&self, offset: usize) -> PathServerResult<(usize, usize)> {
-        offset_to_utf8_position(&self.index, offset)
+    pub fn offset_to_byte_pos(&self, offset: usize) -> (usize, usize) {
+        offset_to_byte_position(&self.index, offset)
     }
 
     pub fn get_tree(&self) -> Option<&Tree> {
@@ -172,10 +172,10 @@ fn offset_to_utf16_position(index: &LineIndex, offset: usize) -> PathServerResul
     Ok((wide_offset.line as usize, wide_offset.col as usize))
 }
 
-fn offset_to_utf8_position(index: &LineIndex, offset: usize) -> PathServerResult<(usize, usize)> {
+fn offset_to_byte_position(index: &LineIndex, offset: usize) -> (usize, usize) {
     let text_offset = TextSize::new(offset as u32);
     let line_col = index.line_col(text_offset);
-    Ok((line_col.line as usize, line_col.col as usize))
+    (line_col.line as usize, line_col.col as usize)
 }
 
 #[cfg(test)]

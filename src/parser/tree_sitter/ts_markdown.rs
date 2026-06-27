@@ -164,3 +164,20 @@ pub fn extract_strings(
 
     Ok(strings.into_iter().collect::<Vec<_>>())
 }
+
+/// Collect byte ranges of HTML comment nodes (<!-- ... -->) in markdown/mdx.
+/// In tree-sitter-markdown these are parsed as `html_tag` nodes.
+pub fn extract_comments(source: &str, node: &tree_sitter::Node) -> Vec<(usize, usize)> {
+    let mut ranges = Vec::new();
+    if node.kind() == "html_tag" {
+        let text = &source[node.start_byte()..node.end_byte()];
+        if text.starts_with("<!--") && text.ends_with("-->") {
+            ranges.push((node.start_byte(), node.end_byte()));
+        }
+    }
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        ranges.extend(extract_comments(source, &child));
+    }
+    ranges
+}

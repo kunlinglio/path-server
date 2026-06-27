@@ -132,9 +132,9 @@ pub fn update_tree(
         return Ok(None);
     };
     // prepare InputEdit for tree-sitter
-    let start = old_document.offset_to_utf8_pos(change_start_byte)?;
-    let old_end = old_document.offset_to_utf8_pos(change_old_end_byte)?;
-    let new_end = new_document.offset_to_utf8_pos(change_new_end_byte)?;
+    let start = old_document.offset_to_byte_pos(change_start_byte);
+    let old_end = old_document.offset_to_byte_pos(change_old_end_byte);
+    let new_end = new_document.offset_to_byte_pos(change_new_end_byte);
     let edit = tree_sitter::InputEdit {
         start_byte: change_start_byte,
         old_end_byte: change_old_end_byte,
@@ -169,28 +169,76 @@ pub fn extract_strings(document: &Document) -> PathServerResult<Option<Vec<PathC
         return Ok(None);
     };
 
-    let candidates = match document.language {
-        Language::markdown | Language::mdx => {
-            ts_markdown::extract_strings(&document.text, &tree.root_node())?
-        }
-        Language::html => {
-            ts_html::extract_strings(&document.text, &tree.root_node(), &document.language)
-        }
+    let (candidates, comment_ranges) = match document.language {
+        Language::markdown | Language::mdx => (
+            ts_markdown::extract_strings(&document.text, &tree.root_node())?,
+            ts_markdown::extract_comments(&document.text, &tree.root_node()),
+        ),
+        Language::html => (
+            ts_html::extract_strings(&document.text, &tree.root_node(), &document.language),
+            ts_html::extract_comments(&tree.root_node(), &document.language),
+        ),
         Language::javascript
         | Language::typescript
         | Language::python
         | Language::rust
         | Language::c
-        | Language::c_plus_plus => {
-            ts_general::extract_strings(&document.text, &tree.root_node(), &document.language)
-        }
-        Language::dockerfile => {
-            ts_dockerfile::extract_strings(&document.text, &tree.root_node(), &document.language)
-        }
+        | Language::c_plus_plus => (
+            ts_general::extract_strings(&document.text, &tree.root_node(), &document.language),
+            ts_general::extract_comments(&tree.root_node(), &document.language),
+        ),
+        Language::dockerfile => (
+            ts_dockerfile::extract_strings(&document.text, &tree.root_node(), &document.language),
+            ts_dockerfile::extract_comments(&tree.root_node(), &document.language),
+        ),
         _ => unreachable!("Unsupported language: {}", document.language),
     };
-    let deduplicated: HashSet<PathCandidate> = HashSet::from_iter(candidates);
+    let comment_candidates = extract_paths_from_comment_ranges(document, &comment_ranges)?;
+    let all = candidates.into_iter().chain(comment_candidates);
+    let deduplicated: HashSet<_> = all.collect();
     Ok(Some(deduplicated.into_iter().collect()))
+}
+
+/// Re-parse comment text as markdown to extract paths written in markdown syntax
+fn extract_paths_from_comment_ranges(
+    document: &Document,
+    comment_ranges: &[(usize, usize)],
+) -> PathServerResult<Vec<PathCandidate>> {
+    let mut parser = tree_sitter::Parser::new();
+    parser
+        .set_language(&ts_languages::get_md_language())
+        .map_err(|e| {
+            PathServerError::ParseError(format!(
+                "Failed to set markdown parser for comments: {}",
+                e
+            ))
+        })?;
+    Ok(comment_ranges
+        .iter()
+        .map(|(start, end)| {
+            let range = tree_sitter::Range {
+                start_byte: *start,
+                end_byte: *end,
+                start_point: byte_offset_to_point(document, *start),
+                end_point: byte_offset_to_point(document, *end),
+            };
+            parser.set_included_ranges(&[range]).map_err(|_| {
+                PathServerError::ParseError("Failed to set included ranges for comment".into())
+            })?;
+            let tree = parser.parse(&document.text, None).ok_or_else(|| {
+                PathServerError::ParseError("Failed to parse comment text as markdown".into())
+            })?;
+            ts_markdown::extract_strings(&document.text, &tree.root_node())
+        })
+        .collect::<PathServerResult<Vec<_>>>()?
+        .into_iter()
+        .flatten()
+        .collect())
+}
+
+fn byte_offset_to_point(document: &Document, offset: usize) -> tree_sitter::Point {
+    let (row, column) = document.offset_to_byte_pos(offset);
+    tree_sitter::Point { row, column }
 }
 
 #[cfg(test)]
@@ -205,6 +253,7 @@ mod tests {
     }
 
     /// Print the entire tree-sitter AST
+    #[allow(dead_code)]
     fn print_tree(language: &Language, source: &str) {
         let ts_lang =
             ts_languages::from_language(language).expect("tree-sitter language not available");
@@ -286,7 +335,6 @@ mod tests {
         assert!(tree_sitter_supported("javascript"));
         // normal string
         let normal_src = r#"const tpl = "hello world";"#;
-        print_tree(&Language::javascript, normal_src);
         let res = parse_and_extract(Language::javascript, normal_src);
         assert!(
             res.iter().any(|c| c.content == "hello world"),
@@ -294,7 +342,6 @@ mod tests {
         );
         // template string with interpolation
         let template_src = r#"const tpl = `hello ${name} world`;"#;
-        print_tree(&Language::javascript, template_src);
         let res = parse_and_extract(Language::javascript, template_src);
         assert!(
             res.iter().any(|c| c.content == "hello "),
@@ -306,11 +353,33 @@ mod tests {
         );
         // string with escaped characters
         let escape_src = r#"const s = "line1\\line2";"#;
-        print_tree(&Language::javascript, escape_src);
         let res = parse_and_extract(Language::javascript, escape_src);
         assert!(
             res.iter().any(|c| c.content == "line1\\\\line2"),
             "missing 'line1\\\\line2' with escaped newline"
+        );
+        // Markdown link in JS comment
+        let src = r#"// See [README](./README.md)
+const x = 1;"#;
+        let res = parse_and_extract(Language::javascript, src);
+        assert!(
+            res.iter().any(|c| c.content == "./README.md"),
+            "missing link destination in JS line comment"
+        );
+        let src = r#"/* `./README.md` */
+const x = 1;"#;
+        let res = parse_and_extract(Language::javascript, src);
+        assert!(
+            res.iter().any(|c| c.content == "./README.md"),
+            "missing link destination in JS line comment"
+        );
+        // Path in block comment
+        let src = r#"/* import from ./lib/helper.js */
+const x = 1;"#;
+        let res = parse_and_extract(Language::javascript, src);
+        assert!(
+            res.iter().any(|c| c.content == "./lib/helper.js"),
+            "missing path in JS block comment"
         );
     }
 
@@ -319,7 +388,6 @@ mod tests {
         assert!(tree_sitter_supported("typescript"));
         // normal string
         let normal_src = r#"const tpl: string = "hello world";"#;
-        print_tree(&Language::typescript, normal_src);
         let res = parse_and_extract(Language::typescript, normal_src);
         assert!(
             res.iter().any(|c| c.content == "hello world"),
@@ -327,7 +395,6 @@ mod tests {
         );
         // template string with interpolation
         let template_src = r#"const tpl: string = `ts ${val} end`;"#;
-        print_tree(&Language::typescript, template_src);
         let res = parse_and_extract(Language::typescript, template_src);
         assert!(
             res.iter().any(|c| c.content == "ts "),
@@ -339,11 +406,33 @@ mod tests {
         );
         // string with escaped characters
         let escape_src = r#"const s: string = "line1\\line2";"#;
-        print_tree(&Language::typescript, escape_src);
         let res = parse_and_extract(Language::typescript, escape_src);
         assert!(
             res.iter().any(|c| c.content == "line1\\\\line2"),
             "missing 'line1\\\\line2' with escaped newline"
+        );
+        // Markdown link in TS comment
+        let src = r#"// See [README](./README.md)
+const x = 1;"#;
+        let res = parse_and_extract(Language::typescript, src);
+        assert!(
+            res.iter().any(|c| c.content == "./README.md"),
+            "missing link destination in TS line comment"
+        );
+        let src = r#"/* `./README.md` */
+const x = 1;"#;
+        let res = parse_and_extract(Language::typescript, src);
+        assert!(
+            res.iter().any(|c| c.content == "./README.md"),
+            "missing link destination in TS line comment"
+        );
+        // Path in block comment
+        let src = r#"/* import from ./lib/helper.js */
+const x = 1;"#;
+        let res = parse_and_extract(Language::typescript, src);
+        assert!(
+            res.iter().any(|c| c.content == "./lib/helper.js"),
+            "missing path in TS block comment"
         );
     }
 
@@ -354,19 +443,17 @@ mod tests {
         let normal_src = r#"
         s = "hello"
         t = 'world'
-        u = """multi\nline"""
+        u = """multi \n line"""
         "#;
-        print_tree(&Language::python, normal_src);
         let res = parse_and_extract(Language::python, normal_src);
         assert!(res.iter().any(|c| c.content == "hello"), "missing 'hello'");
         assert!(res.iter().any(|c| c.content == "world"), "missing 'world'");
         assert!(
-            res.iter().any(|c| c.content.trim() == r#"multi\nline"#),
+            res.iter().any(|c| c.content.trim() == r#"multi \n line"#),
             "missing 'multi\nline' in triple-quoted string"
         );
         // f-string
         let f_string_src = r#"s = f"hello {name}""#;
-        print_tree(&Language::python, f_string_src);
         let res = parse_and_extract(Language::python, f_string_src);
         assert!(
             res.iter().any(|c| c.content == "hello "),
@@ -374,31 +461,83 @@ mod tests {
         );
         // string with escaped characters
         let escape_src = r#"s = "line1\\line2""#;
-        print_tree(&Language::python, escape_src);
         let res = parse_and_extract(Language::python, escape_src);
         assert!(
             res.iter().any(|c| c.content == "line1\\\\line2"),
             "missing 'line1\\\\line2' with escaped newline"
+        );
+        // comment
+        let src = r#"# config file at `./config/settings.toml`
+x = 1"#;
+        let res = parse_and_extract(Language::python, src);
+        assert!(
+            res.iter().any(|c| c.content == "./config/settings.toml"),
+            "missing path in Python comment"
+        );
+        let src = r#"# config file at [](./config/settings.toml)
+x = 1"#;
+        let res = parse_and_extract(Language::python, src);
+        assert!(
+            res.iter().any(|c| c.content == "./config/settings.toml"),
+            "missing path in Python comment"
         );
     }
 
     #[test]
     fn test_rust_extract_strings() {
         assert!(tree_sitter_supported("rust"));
+        // normal string
         let src = "let a = \"hello\"; let b = r#\"raw content\"#";
-        print_tree(&Language::rust, src);
         let res = parse_and_extract(Language::rust, src);
         assert!(res.iter().any(|c| c.content == "hello"), "missing 'hello'");
         assert!(
             res.iter().any(|c| c.content == "raw content"),
             "missing raw string content"
         );
-        let escaped_src = "let s = \"line1\\\\nline2\";";
-        print_tree(&Language::rust, escaped_src);
+        // escaped string
+        let escaped_src = "let s = \"line1\\\\n line2\";";
         let res = parse_and_extract(Language::rust, escaped_src);
         assert!(
-            res.iter().any(|c| c.content == "line1\\\\nline2"),
-            "missing 'line1\\\\nline2' with escaped newline"
+            res.iter().any(|c| c.content == "line1\\\\n line2"),
+            "missing 'line1\\\\n line2' with escaped newline"
+        );
+        // bare path in line comment
+        let src = r#"// ./src/main.rs
+let x = 1;"#;
+        let res = parse_and_extract(Language::rust, src);
+        assert!(
+            res.iter().any(|c| c.content == "./src/main.rs"),
+            "missing bare path in Rust line comment"
+        );
+        // markdown link in doc comment
+        let src = r#"/// See [the docs](./docs/README.md) for more.
+let x = 1;"#;
+        let res = parse_and_extract(Language::rust, src);
+        assert!(
+            res.iter().any(|c| c.content == "./docs/README.md"),
+            "missing markdown link destination in Rust doc comment"
+        );
+        // path in block comment
+        let src = r#"/* config: ./config.toml */"#;
+        let res = parse_and_extract(Language::rust, src);
+        assert!(
+            res.iter().any(|c| c.content == "./config.toml"),
+            "missing path in Rust block comment"
+        );
+        // markdown link in inner doc comment
+        let src = r#"//! Inner doc [crate](./src/lib.rs)
+let x = 1;"#;
+        let res = parse_and_extract(Language::rust, src);
+        assert!(
+            res.iter().any(|c| c.content == "./src/lib.rs"),
+            "missing markdown link in Rust inner doc comment"
+        );
+        // path in doc block comment
+        let src = r#"/** Outer doc block with `./config.toml` */"#;
+        let res = parse_and_extract(Language::rust, src);
+        assert!(
+            res.iter().any(|c| c.content == "./config.toml"),
+            "missing code span path in Rust doc block comment"
         );
     }
 
@@ -406,14 +545,12 @@ mod tests {
     fn test_markdown_extract_strings() {
         assert!(tree_sitter_supported("markdown"));
         let link = "![a picture](./public/image.png)";
-        print_tree(&Language::markdown, link);
         let res = parse_and_extract(Language::markdown, link);
         assert!(
             res.iter().any(|c| c.content == "./public/image.png"),
             "missing link destination"
         );
         let text_in_quotes = "some text and `./public/image1.png`\nmore text and './public/image2.png'\n even more and \"./public/image3.png\"";
-        print_tree(&Language::markdown, text_in_quotes);
         let res = parse_and_extract(Language::markdown, text_in_quotes);
         eprintln!("{:?}", res);
         assert!(
@@ -429,7 +566,6 @@ mod tests {
             "missing path in code span"
         );
         let text_in_starts = "some text and *bold* and **strong**";
-        print_tree(&Language::markdown, text_in_starts);
         let res = parse_and_extract(Language::markdown, text_in_starts);
         assert!(res.iter().any(|c| c.content == "bold"), "missing bold text");
         assert!(
@@ -443,7 +579,6 @@ mod tests {
 cd ./extensions/vscode/
 ```
         "#;
-        print_tree(&Language::markdown, common_path_in_text);
         let res = parse_and_extract(Language::markdown, common_path_in_text);
         assert!(
             res.iter().any(|c| c.content == "./extensions/vscode/"),
@@ -465,7 +600,6 @@ The **Path Server** project is organized in mono-repository structure with core 
 
 > Quote: ./extensions/vscode/more
         "#;
-        print_tree(&Language::markdown, complicated_case);
         let res = parse_and_extract(Language::markdown, complicated_case);
         eprintln!("{:?}", res);
         assert!(
@@ -489,17 +623,19 @@ Project Timer is a lightweight VS Code extension that tracks the time you spend 
     <img src="./resources/demo.gif" alt="demo" style="width: 600px">
 </div>
 "#;
-        print_tree(&Language::markdown, md_with_html);
         let res = parse_and_extract(Language::markdown, md_with_html);
         eprintln!("{:?}", res);
         assert!(
             res.iter().any(|c| c.content == "./resources/demo.gif"),
             "missing path in HTML block"
         );
-    }
-
-    #[test]
-    fn test_mdx_extract_strings_with_markdown_parser() {
+        // HTML comment
+        let src = "<!-- ./docs/api.md -->\n# Title";
+        let res = parse_and_extract(Language::markdown, src);
+        assert!(
+            res.iter().any(|c| c.content == "./docs/api.md"),
+            "missing path in markdown HTML comment"
+        );
         assert!(tree_sitter_supported("mdx"));
         let mdx = r#"
 import Demo from './components/Demo'
@@ -509,8 +645,7 @@ import Demo from './components/Demo'
 <Demo image="./assets/demo.png" />
         "#;
 
-        let doc = Document::new(mdx.to_string(), "mdx").expect("failed to create MDX document");
-        let res = extract_strings(&doc).unwrap().unwrap();
+        let res = parse_and_extract(Language::mdx, mdx);
         eprintln!("{:?}", res);
         assert!(
             res.iter().any(|c| c.content == "./components/Demo"),
@@ -529,8 +664,8 @@ import Demo from './components/Demo'
     #[test]
     fn test_html_extract_string() {
         assert!(tree_sitter_supported("html"));
+        // normal document
         let simple = r#"    <script src="echarts.min.js"></script>"#;
-        print_tree(&Language::html, simple);
         let res = parse_and_extract(Language::html, simple);
         eprintln!("{:?}", res);
         assert!(res.iter().any(|c| c.content == "echarts.min.js"));
@@ -549,44 +684,79 @@ import Demo from './components/Demo'
 <div>Some content include a path ./extension.toml</div>
 </body>
         "#;
-        print_tree(&Language::html, html);
         let res = parse_and_extract(Language::html, html);
         eprintln!("{:?}", res);
         assert!(res.iter().any(|c| c.content == "echarts.min.js"));
         assert!(res.iter().any(|c| c.content == "statistics.css"));
         assert!(res.iter().any(|c| c.content == "./extension.toml"));
+        // comment
+        let src = r#"<!-- ./partials/header.html -->
+<p>content</p>"#;
+        let res = parse_and_extract(Language::html, src);
+        assert!(
+            res.iter().any(|c| c.content == "./partials/header.html"),
+            "missing path in HTML comment"
+        );
     }
 
     #[test]
     fn test_c_extract_string() {
+        // string literal
         assert!(tree_sitter_supported("c"));
         let str_with_escaped = r#"char *str = "Hello, \"World\"!";"#;
-        print_tree(&Language::c, str_with_escaped);
         let res = parse_and_extract(Language::c, str_with_escaped);
         eprintln!("{:?}", res);
         assert!(res.iter().any(|c| c.content == "Hello, \\\"World\\\"!"));
-
+        // path in #include directive
         let path_in_include = r#"#include "path/to/header.h""#;
-        print_tree(&Language::c, path_in_include);
         let res = parse_and_extract(Language::c, path_in_include);
         eprintln!("{:?}", res);
         assert!(res.iter().any(|c| c.content == "path/to/header.h"));
+        // Markdown-style inline code in C comment
+        let src = r#"// include `src/header.h`
+int x = 1;"#;
+        let res = parse_and_extract(Language::c, src);
+        assert!(
+            res.iter().any(|c| c.content == "src/header.h"),
+            "missing code span path in C comment"
+        );
+        // Path in block comment
+        let src = r#"/* See ./include/config.h */
+int x = 1;"#;
+        let res = parse_and_extract(Language::c, src);
+        assert!(
+            res.iter().any(|c| c.content == "./include/config.h"),
+            "missing path in C block comment"
+        );
     }
 
     #[test]
     fn test_cpp_extract_string() {
         assert!(tree_sitter_supported("cpp"));
         let str_with_escaped = r#"std::string str = "Hello, \"World\"!";"#;
-        print_tree(&Language::c_plus_plus, str_with_escaped);
         let res = parse_and_extract(Language::c_plus_plus, str_with_escaped);
         eprintln!("{:?}", res);
         assert!(res.iter().any(|c| c.content == "Hello, \\\"World\\\"!"));
 
         let path_in_include = r#"#include "path/to/header.h""#;
-        print_tree(&Language::c_plus_plus, path_in_include);
         let res = parse_and_extract(Language::c_plus_plus, path_in_include);
         eprintln!("{:?}", res);
         assert!(res.iter().any(|c| c.content == "path/to/header.h"));
+        // comment
+        let src = r#"// See [README](./README.md)
+int x = 1;"#;
+        let res = parse_and_extract(Language::c_plus_plus, src);
+        assert!(
+            res.iter().any(|c| c.content == "./README.md"),
+            "missing link destination in C++ line comment"
+        );
+        let src = r#"/* import from ./lib/helper.hpp */
+int x = 1;"#;
+        let res = parse_and_extract(Language::c_plus_plus, src);
+        assert!(
+            res.iter().any(|c| c.content == "./lib/helper.hpp"),
+            "missing path in C++ block comment"
+        );
     }
 
     #[test]
@@ -612,7 +782,6 @@ COPY server /workdir/server
 COPY migrations /workdir/migrations
 RUN ./中文/路径/out
 "#;
-        print_tree(&Language::dockerfile, dockerfile);
         let res = parse_and_extract(Language::dockerfile, dockerfile);
         eprintln!("{:?}", res);
         assert!(res.iter().any(|c| c.content == "/workdir"));
@@ -637,6 +806,14 @@ RUN ./中文/路径/out
             res.iter()
                 .any(|c| matches!(c.content.as_str(), "/workdir/migrations"))
         );
-        assert!(res.iter().any(|c| c.content == "./中文/路径/out"),)
+        assert!(res.iter().any(|c| c.content == "./中文/路径/out"),);
+        // comment
+        let src = r#"# copy from ./config/app.conf
+FROM alpine"#;
+        let res = parse_and_extract(Language::dockerfile, src);
+        assert!(
+            res.iter().any(|c| c.content == "./config/app.conf"),
+            "missing path in Dockerfile comment"
+        );
     }
 }
