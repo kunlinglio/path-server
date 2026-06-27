@@ -54,6 +54,7 @@ languages = [
   "Luau",
   "Makefile",
   "Markdown",
+  "MDX",
   "Nim",
   "Nix",
   "OCaml",

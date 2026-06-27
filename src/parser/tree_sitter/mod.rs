@@ -94,7 +94,7 @@ pub mod ts_languages {
             Language::typescript => Some(get_ts_language()),
             Language::python => Some(get_python_language()),
             Language::rust => Some(get_rust_language()),
-            Language::markdown => Some(get_md_language()),
+            Language::markdown | Language::mdx => Some(get_md_language()),
             Language::html => Some(get_html_language()),
             Language::c => Some(get_c_language()),
             Language::c_plus_plus => Some(get_cpp_language()),
@@ -170,7 +170,9 @@ pub fn extract_strings(document: &Document) -> PathServerResult<Option<Vec<PathC
     };
 
     let candidates = match document.language {
-        Language::markdown => ts_markdown::extract_strings(&document.text, &tree.root_node())?,
+        Language::markdown | Language::mdx => {
+            ts_markdown::extract_strings(&document.text, &tree.root_node())?
+        }
         Language::html => {
             ts_html::extract_strings(&document.text, &tree.root_node(), &document.language)
         }
@@ -221,22 +223,23 @@ mod tests {
         is_last: bool,
         language: &Language,
     ) {
-        let inline_tree = if language == &Language::markdown && node.kind() == "inline" {
-            let mut inline_parser = tree_sitter::Parser::new();
-            inline_parser
-                .set_language(&ts_languages::get_md_inline_language())
-                .expect("failed to set inline language");
-            inline_parser
-                .set_included_ranges(&vec![node.range()])
-                .expect("failed to set included ranges");
-            Some(
+        let inline_tree =
+            if matches!(language, Language::markdown | Language::mdx) && node.kind() == "inline" {
+                let mut inline_parser = tree_sitter::Parser::new();
                 inline_parser
-                    .parse(source, None)
-                    .expect("failed to parse inline source"),
-            )
-        } else {
-            None
-        };
+                    .set_language(&ts_languages::get_md_inline_language())
+                    .expect("failed to set inline language");
+                inline_parser
+                    .set_included_ranges(&vec![node.range()])
+                    .expect("failed to set included ranges");
+                Some(
+                    inline_parser
+                        .parse(source, None)
+                        .expect("failed to parse inline source"),
+                )
+            } else {
+                None
+            };
         let node = if let Some(inline_tree) = &inline_tree {
             &inline_tree.root_node()
         } else {
@@ -487,6 +490,35 @@ Project Timer is a lightweight VS Code extension that tracks the time you spend 
         assert!(
             res.iter().any(|c| c.content == "./resources/demo.gif"),
             "missing path in HTML block"
+        );
+    }
+
+    #[test]
+    fn test_mdx_extract_strings_with_markdown_parser() {
+        let mdx = r#"
+import Demo from './components/Demo'
+
+![Hero](./public/hero.png)
+
+<Demo image="./assets/demo.png" />
+        "#;
+
+        assert!(tree_sitter_supported("mdx"));
+
+        let doc = Document::new(mdx.to_string(), "mdx").expect("failed to create MDX document");
+        let res = extract_strings(&doc).unwrap().unwrap();
+        eprintln!("{:?}", res);
+        assert!(
+            res.iter().any(|c| c.content == "./components/Demo"),
+            "missing path in MDX import"
+        );
+        assert!(
+            res.iter().any(|c| c.content == "./public/hero.png"),
+            "missing path in MDX markdown link"
+        );
+        assert!(
+            res.iter().any(|c| c.content == "./assets/demo.png"),
+            "missing path in MDX JSX attribute"
         );
     }
 

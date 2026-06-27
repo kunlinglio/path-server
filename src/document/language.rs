@@ -55,6 +55,7 @@ pub enum Language {
     luau,
     makefile,
     markdown,
+    mdx,
     nim,
     nix,
     ocaml,
