@@ -132,9 +132,9 @@ pub fn update_tree(
         return Ok(None);
     };
     // prepare InputEdit for tree-sitter
-    let start = old_document.offset_to_utf8_pos(change_start_byte);
-    let old_end = old_document.offset_to_utf8_pos(change_old_end_byte);
-    let new_end = new_document.offset_to_utf8_pos(change_new_end_byte);
+    let start = old_document.offset_to_byte_pos(change_start_byte);
+    let old_end = old_document.offset_to_byte_pos(change_old_end_byte);
+    let new_end = new_document.offset_to_byte_pos(change_new_end_byte);
     let edit = tree_sitter::InputEdit {
         start_byte: change_start_byte,
         old_end_byte: change_old_end_byte,
@@ -239,7 +239,7 @@ fn extract_paths_from_comment_ranges(
 }
 
 fn byte_offset_to_point(document: &Document, offset: usize) -> tree_sitter::Point {
-    let (row, column) = document.offset_to_utf8_pos(offset);
+    let (row, column) = document.offset_to_byte_pos(offset);
     tree_sitter::Point { row, column }
 }
 
