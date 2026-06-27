@@ -283,6 +283,7 @@ mod tests {
 
     #[test]
     fn test_javascript_extract_strings() {
+        assert!(tree_sitter_supported("javascript"));
         // normal string
         let normal_src = r#"const tpl = "hello world";"#;
         print_tree(&Language::javascript, normal_src);
@@ -315,6 +316,7 @@ mod tests {
 
     #[test]
     fn test_typescript_extract_string() {
+        assert!(tree_sitter_supported("typescript"));
         // normal string
         let normal_src = r#"const tpl: string = "hello world";"#;
         print_tree(&Language::typescript, normal_src);
@@ -347,6 +349,7 @@ mod tests {
 
     #[test]
     fn test_python_extract_strings() {
+        assert!(tree_sitter_supported("python"));
         // normal string with single, double, and triple quotes
         let normal_src = r#"
         s = "hello"
@@ -381,6 +384,7 @@ mod tests {
 
     #[test]
     fn test_rust_extract_strings() {
+        assert!(tree_sitter_supported("rust"));
         let src = "let a = \"hello\"; let b = r#\"raw content\"#";
         print_tree(&Language::rust, src);
         let res = parse_and_extract(Language::rust, src);
@@ -400,6 +404,7 @@ mod tests {
 
     #[test]
     fn test_markdown_extract_strings() {
+        assert!(tree_sitter_supported("markdown"));
         let link = "![a picture](./public/image.png)";
         print_tree(&Language::markdown, link);
         let res = parse_and_extract(Language::markdown, link);
@@ -495,6 +500,7 @@ Project Timer is a lightweight VS Code extension that tracks the time you spend 
 
     #[test]
     fn test_mdx_extract_strings_with_markdown_parser() {
+        assert!(tree_sitter_supported("mdx"));
         let mdx = r#"
 import Demo from './components/Demo'
 
@@ -502,8 +508,6 @@ import Demo from './components/Demo'
 
 <Demo image="./assets/demo.png" />
         "#;
-
-        assert!(tree_sitter_supported("mdx"));
 
         let doc = Document::new(mdx.to_string(), "mdx").expect("failed to create MDX document");
         let res = extract_strings(&doc).unwrap().unwrap();
@@ -524,6 +528,7 @@ import Demo from './components/Demo'
 
     #[test]
     fn test_html_extract_string() {
+        assert!(tree_sitter_supported("html"));
         let simple = r#"    <script src="echarts.min.js"></script>"#;
         print_tree(&Language::html, simple);
         let res = parse_and_extract(Language::html, simple);
@@ -554,6 +559,7 @@ import Demo from './components/Demo'
 
     #[test]
     fn test_c_extract_string() {
+        assert!(tree_sitter_supported("c"));
         let str_with_escaped = r#"char *str = "Hello, \"World\"!";"#;
         print_tree(&Language::c, str_with_escaped);
         let res = parse_and_extract(Language::c, str_with_escaped);
@@ -569,6 +575,7 @@ import Demo from './components/Demo'
 
     #[test]
     fn test_cpp_extract_string() {
+        assert!(tree_sitter_supported("cpp"));
         let str_with_escaped = r#"std::string str = "Hello, \"World\"!";"#;
         print_tree(&Language::c_plus_plus, str_with_escaped);
         let res = parse_and_extract(Language::c_plus_plus, str_with_escaped);
@@ -584,6 +591,7 @@ import Demo from './components/Demo'
 
     #[test]
     fn test_dockerfile_extract_path() {
+        assert!(tree_sitter_supported("dockerfile"));
         let dockerfile = r#"
 FROM python:3.13-slim AS production
 WORKDIR /workdir
