@@ -2,8 +2,7 @@
 
 All notable changes to the Path Server will be documented in this file.
 
-## Unreleased
-
+## [1.4.0] - 2026-06-27
 ### Added
 - Added language support assert to tree-sitter parser tests.
 - **Core**: Added support for extracting paths from comments that use markdown syntax.
