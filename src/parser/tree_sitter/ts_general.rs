@@ -3,6 +3,34 @@ use crate::document::Language;
 
 use super::PathCandidate;
 
+/// Collect byte ranges of comment nodes in the tree.
+pub fn extract_comments(
+    source: &str,
+    node: &tree_sitter::Node,
+    language: &Language,
+) -> Vec<(usize, usize)> {
+    let mut ranges = Vec::new();
+    if is_comment_node(node, language) {
+        ranges.push((node.start_byte(), node.end_byte()));
+    }
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        ranges.extend(extract_comments(source, &child, language));
+    }
+    ranges
+}
+
+fn is_comment_node(node: &tree_sitter::Node, language: &Language) -> bool {
+    let kind = node.kind();
+    match language {
+        Language::rust => matches!(
+            kind,
+            "line_comment" | "block_comment" | "line_doc_comment" | "block_doc_comment"
+        ),
+        _ => kind == "comment",
+    }
+}
+
 pub fn extract_strings(
     source: &str,
     node: &tree_sitter::Node,

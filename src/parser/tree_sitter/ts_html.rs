@@ -5,6 +5,24 @@ use crate::document::Language;
 
 use super::PathCandidate;
 
+/// Collect byte ranges of HTML comment nodes in HTML.
+pub fn extract_comments(
+    source: &str,
+    node: &tree_sitter::Node,
+    language: &Language,
+) -> Vec<(usize, usize)> {
+    assert_eq!(language, &Language::html);
+    let mut ranges = Vec::new();
+    if node.kind() == "comment" {
+        ranges.push((node.start_byte(), node.end_byte()));
+    }
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        ranges.extend(extract_comments(source, &child, language));
+    }
+    ranges
+}
+
 pub fn extract_strings(
     source: &str,
     node: &tree_sitter::Node,
