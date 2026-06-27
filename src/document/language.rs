@@ -2,6 +2,12 @@ use strum_macros::{Display, EnumString};
 
 /// Language type wrapper from lsp
 /// Reference to https://code.visualstudio.com/docs/languages/identifiers
+///
+/// NOTE: This list mirrors `extensions/zed/extension.toml` because Zed doesn't
+/// support language wildcards, forcing us to enumerate each language explicitly.
+///
+/// TODO: This is fragile — ideally we should either source from a maintained registry
+/// or generate the enum from the TOML at build time.
 #[allow(non_camel_case_types)]
 #[derive(EnumString, Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Display)]
 #[strum(serialize_all = "lowercase")]

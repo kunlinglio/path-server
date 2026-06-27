@@ -8,6 +8,7 @@ repository = "https://github.com/kunlinglio/path-server"
 
 [language_servers.path-server-lsp]
 name = "path-server-lsp"
+# NOTE: Don't forget to update the languages enum in `src/document/language.rs` when you add/remove languages here.
 languages = [
   "AsciiDoc",
   "Astro",
