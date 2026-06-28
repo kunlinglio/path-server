@@ -2,6 +2,10 @@
 
 All notable changes to the Path Server will be documented in this file.
 
+## Unreleased
+### Improved
+- Reduced resource consumption by limiting the number of blocking threads in the tokio runtime to 4 in default.
+
 ## [1.4.0] - 2026-06-27
 ### Added
 - Added language support assert to tree-sitter parser tests.
