@@ -2,7 +2,7 @@
 
 All notable changes to the Path Server will be documented in this file.
 
-## Unreleased
+## [1.4.1] - 2026-07-25
 ### Improved
 - Reduced resource consumption by limiting the number of blocking threads in the tokio runtime to 4 in default.
 
