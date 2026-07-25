@@ -1,15 +1,24 @@
 use path_server::PathServer;
 
 #[cfg(feature = "multi-thread")]
-#[tokio::main(flavor = "multi_thread")]
-async fn main() {
-    inner().await;
+fn main() {
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+
+    rt.block_on(inner());
 }
 
 #[cfg(not(feature = "multi-thread"))]
-#[tokio::main(flavor = "current_thread")]
-async fn main() {
-    inner().await;
+fn main() {
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .max_blocking_threads(4)
+        .build()
+        .unwrap();
+
+    rt.block_on(inner());
 }
 
 async fn inner() {
