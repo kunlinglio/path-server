@@ -68,7 +68,7 @@ Search for `Path Server` in the Zed extensions catalog and click install.
 
 > **Note**: Zed does not support package extension manually for now.
 
-> **Note**: Document Links (path underline highlight) is not yet supported in Zed as it does not implement the LSP Document Link feature.
+> **Note**: Path underline highlight is not yet supported in Zed editor itself as it does not implement the LSP Document Link feature.
 
 ### Other Editors (Helix, Neovim, etc.)
 For other editors that support LSP, Path Server should be compatible as well. You can follow the instructions below to get started:
