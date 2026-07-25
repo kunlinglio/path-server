@@ -6,6 +6,9 @@ All notable changes to the Path Server will be documented in this file.
 ### Improved
 - Reduced resource consumption by limiting the number of blocking threads in the tokio runtime to 4 in default.
 
+### Fixed
+- Bumped `anyhow` dependency to 1.0.102 to fix the security vulnerability [RUSTSEC-2026-0190](https://rustsec.org/advisories/RUSTSEC-2026-0190).
+
 ## [1.4.0] - 2026-06-27
 ### Added
 - Added language support assert to tree-sitter parser tests.
