@@ -58,7 +58,7 @@ impl PathServer {
         *guard = Some(Arc::new(cfg));
     }
 
-    pub async fn workspace_paths(&self) -> Vec<String> {
+    async fn workspace_paths(&self) -> Vec<String> {
         let lock_guard = self.workspace_roots.read().await;
         lock_guard
             .iter()
@@ -67,7 +67,7 @@ impl PathServer {
             .collect::<Vec<_>>()
     }
 
-    pub fn doc_parent(doc_url: &ls_types::Uri) -> Option<String> {
+    fn doc_parent(doc_url: &ls_types::Uri) -> Option<String> {
         fs::url_to_path(doc_url)
             .ok()
             .flatten()
