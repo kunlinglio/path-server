@@ -9,7 +9,7 @@ pub async fn resolve_at_pos(
     document: &Document,
     config: &Config,
     workspace_roots: &[String],
-    parent: &Option<String>,
+    parent: Option<&str>,
     cursor: (usize, usize),
 ) -> PathServerResult<Option<ResolvedPath>> {
     let tokens = resolve_all(document, config, workspace_roots, parent).await?;

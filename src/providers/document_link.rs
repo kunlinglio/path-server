@@ -8,7 +8,7 @@ use crate::resolver;
 
 pub async fn provide_document_links(
     doc: &Document,
-    doc_parent: &Option<String>,
+    doc_parent: Option<&str>,
     config: &Config,
     workspace_roots: &[String],
 ) -> PathServerResult<Vec<ls_types::DocumentLink>> {
@@ -62,7 +62,7 @@ mod tests {
 
         let links = provide_document_links(
             &doc,
-            &Option::Some(current_file.to_string_lossy().into_owned()),
+            Option::Some(current_file.to_str().unwrap()),
             &Config::default(),
             &Vec::new(),
         )
@@ -96,13 +96,7 @@ mod tests {
 
         let links = provide_document_links(
             &doc,
-            &Option::Some(
-                current_file
-                    .parent()
-                    .unwrap()
-                    .to_string_lossy()
-                    .into_owned(),
-            ),
+            Option::Some(current_file.parent().unwrap().to_str().unwrap()),
             &Config::default(),
             &Vec::new(),
         )

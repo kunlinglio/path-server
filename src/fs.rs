@@ -80,6 +80,19 @@ pub fn path_to_url(path: &PathBuf) -> PathServerResult<ls_types::Uri> {
     )))
 }
 
+/// Expand "~" to the user's home directory
+pub fn expand_tilde(path: &str, home_dir: &str) -> String {
+    if path.starts_with("~/") || path.starts_with("~\\") {
+        format!("{}{}", home_dir, &path[1..])
+    } else {
+        path.to_string()
+    }
+}
+
+pub fn get_home_dir() -> Option<String> {
+    dirs::home_dir().map(|p| p.to_string_lossy().to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
@@ -104,5 +117,36 @@ mod tests {
             PathServerError::Unsupported(_) => {}
             _ => assert!(false, "expected Unsupported error, got: {}", err),
         }
+    }
+
+    #[test]
+    fn test_expand_tilde() {
+        let mock_home_dir = tempfile::tempdir().unwrap();
+        let mock_home_dir_str = mock_home_dir.path().to_string_lossy();
+
+        let result = expand_tilde("~/projects", &mock_home_dir_str);
+        assert_eq!(result, format!("{}/projects", mock_home_dir_str));
+        let result = expand_tilde("/path/without/tilde", &mock_home_dir_str);
+        assert_eq!(result, "/path/without/tilde".to_string());
+    }
+
+    #[test]
+    fn test_get_home_dir() {
+        let home_dir = get_home_dir().unwrap();
+        assert!(PathBuf::from(home_dir.clone()).exists());
+        assert!(PathBuf::from(home_dir.clone()).is_absolute());
+        expand_tilde("test_dir", &home_dir);
+        assert!(PathBuf::from(home_dir).is_absolute());
+    }
+
+    #[test]
+    fn test_windows_home_path() {
+        let mock_home_dir = tempfile::tempdir().unwrap();
+        let mock_home_dir_str = mock_home_dir.path().to_string_lossy();
+
+        let result = expand_tilde("~\\projects", &mock_home_dir_str);
+        assert_eq!(result, format!("{}\\projects", mock_home_dir_str));
+        let result = expand_tilde("\\path\\without\\tilde", &mock_home_dir_str);
+        assert_eq!(result, "\\path\\without\\tilde".to_string());
     }
 }

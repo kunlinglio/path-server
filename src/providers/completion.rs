@@ -22,13 +22,21 @@ pub async fn provide_completion(
     doc: &Document,
     (line_number, character): (usize, usize),
     workspace_roots: &[String],
-    current_file_parent: &Option<String>,
+    current_file_parent: Option<&str>,
     completion_config: &config::Config,
 ) -> PathServerResult<Vec<ls_types::CompletionItem>> {
     let line_prefix = doc.get_line(line_number, Some(character))?;
+    let home_dir = fs::get_home_dir();
+    if home_dir.is_none() {
+        lsp_warn!("Failed to get home directory, '~' will not be expanded").await;
+    }
     for path_candidate in parser::parse_line(&line_prefix) {
         let (base_dir, partial_name) = parser::separate_prefix(path_candidate.clone());
-        let base_dir = PathBuf::from(expand_tilde(&base_dir)?);
+        let base_dir = if let Some(home_dir) = home_dir.clone() {
+            PathBuf::from(fs::expand_tilde(&base_dir, &home_dir))
+        } else {
+            PathBuf::from(&base_dir)
+        };
 
         let completions: Vec<CompletionItemInner> = if base_dir.is_absolute() {
             // absolute path
@@ -44,11 +52,10 @@ pub async fn provide_completion(
             .await?
         } else if base_dir.is_relative() {
             // relative path
-            let home = std::env::var("HOME").ok();
             let base_paths = completion_config.base_paths(
                 workspace_roots,
-                current_file_parent.as_ref(),
-                home.as_ref(),
+                current_file_parent,
+                home_dir.as_deref(),
             );
 
             future::try_join_all(base_paths.iter().map(async |(base_path, schema, order)| {
@@ -87,19 +94,6 @@ pub async fn provide_completion(
         }
     }
     Ok(vec![])
-}
-
-/// Expand "~" to the user's home directory
-fn expand_tilde(path: &str) -> PathServerResult<String> {
-    let path = if path.starts_with("~/") {
-        let home = std::env::var("HOME").map_err(|e| {
-            PathServerError::Unknown(format!("Failed to get HOME environment variable: {}", e))
-        })?;
-        format!("{}{}", home, &path[1..])
-    } else {
-        path.to_string()
-    };
-    Ok(path)
 }
 
 /// Filter duplicated and ignored completions
@@ -237,7 +231,6 @@ async fn generate_completions(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::env;
 
     #[tokio::test]
     async fn test_complete() {
@@ -279,7 +272,7 @@ mod tests {
             &document,
             (0, "./data/a".to_string().len()),
             &roots,
-            &Option::Some(current_file_parent),
+            Option::Some(current_file_parent).as_deref(),
             &config,
         )
         .await
@@ -346,27 +339,6 @@ mod tests {
         // should cap at 1
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].label, "1.txt");
-    }
-
-    #[tokio::test]
-    async fn test_expand_tilde() {
-        // test with HOME env
-        let dir = tempfile::tempdir().unwrap();
-        unsafe {
-            env::set_var("HOME", dir.path());
-        }
-
-        let result = expand_tilde("~/projects").unwrap();
-        assert_eq!(result, format!("{}/projects", dir.path().display()));
-        let result = expand_tilde("/path/without/tilde");
-        assert_eq!(result.unwrap(), "/path/without/tilde".to_string());
-
-        // test without HOME env
-        unsafe {
-            env::remove_var("HOME");
-        }
-        let result = expand_tilde("~/projects");
-        assert!(result.is_err());
     }
 
     #[tokio::test]

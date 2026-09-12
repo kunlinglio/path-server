@@ -278,7 +278,7 @@ impl tower_lsp_server::LanguageServer for PathServer {
             doc,
             (line_number, character),
             &workspace_roots,
-            &parent,
+            parent.as_deref(),
             &config,
         )
         .await?;
@@ -333,7 +333,8 @@ impl tower_lsp_server::LanguageServer for PathServer {
         let workspace_roots = self.workspace_paths().await;
         let parent = Self::doc_parent(&params.text_document.uri);
         let links =
-            providers::provide_document_links(doc, &parent, &config, &workspace_roots).await?;
+            providers::provide_document_links(doc, parent.as_deref(), &config, &workspace_roots)
+                .await?;
         lsp_info!(
             "[Document Link] Generated {} document links in {:?}",
             links.len(),
@@ -385,9 +386,15 @@ impl tower_lsp_server::LanguageServer for PathServer {
         let config = self.get_config().await;
         let workspace_roots = self.workspace_paths().await;
 
-        let definition =
-            providers::provide_definition(doc, &parent, line, character, &config, &workspace_roots)
-                .await?;
+        let definition = providers::provide_definition(
+            doc,
+            parent.as_deref(),
+            line,
+            character,
+            &config,
+            &workspace_roots,
+        )
+        .await?;
         if let Some(definition) = &definition {
             let ls_types::GotoDefinitionResponse::Link(definition) = &definition else {
                 unreachable!("Definition is not a link");
@@ -450,9 +457,15 @@ impl tower_lsp_server::LanguageServer for PathServer {
             )))?;
         let workspace_roots = self.workspace_paths().await;
 
-        let hover =
-            providers::provide_hover(doc, &parent, line, character, &config, &workspace_roots)
-                .await?;
+        let hover = providers::provide_hover(
+            doc,
+            parent.as_deref(),
+            line,
+            character,
+            &config,
+            &workspace_roots,
+        )
+        .await?;
         if let Some(hover) = &hover {
             lsp_info!(
                 "[Hover] Generated hover content: {:?} in {:?}",

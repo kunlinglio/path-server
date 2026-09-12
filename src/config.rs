@@ -61,8 +61,8 @@ impl Config {
     pub fn base_paths(
         &self,
         workspace_folders: &[String],
-        document_parent: Option<&String>,
-        user_home: Option<&String>,
+        document_parent: Option<&str>,
+        user_home: Option<&str>,
     ) -> Vec<(PathBuf, String, usize)> {
         self.base_path
             .iter()
@@ -295,7 +295,7 @@ mod tests {
         };
 
         let workspace_folders = vec!["/ws1".to_string(), "/ws2".to_string()];
-        let document_parent = Some(&"/ws1/project".to_string());
+        let document_parent = Some("/ws1/project");
         let user_home = None;
 
         let result = config.base_paths(&workspace_folders, document_parent, user_home);
@@ -334,7 +334,7 @@ mod tests {
 
         let workspace_folders = vec![];
         let document_parent = None;
-        let user_home = Some(&"/home/user".to_string());
+        let user_home = Some("/home/user");
 
         let result = config.base_paths(&workspace_folders, document_parent, user_home);
 
