@@ -4,8 +4,9 @@ All notable changes to the Path Server will be documented in this file.
 
 ## Unrelease
 ### Fixed
-- Fixed tildes are not directly expanded on Windows platform.
-- Fixed `config.base_path` can only extend first placeholder.
+- **Core**: Fixed an error when generating completions in a directory without read permission.
+- **Core**: Fixed tildes are not directly expanded on Windows platform.
+- **Core**: Fixed `config.base_path` can only extend first placeholder.
 
 ## [1.4.1] - 2026-07-25
 ### Improved

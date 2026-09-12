@@ -156,71 +156,77 @@ async fn generate_completions(
         lsp_debug!("Base directory is not a directory: {}", dir.display()).await;
         return Ok(vec![]);
     }
+    let Ok(entries) = fs::read_dir(&dir).await else {
+        lsp_warn!(
+            "Failed to read dir {}, skip generating completions.",
+            dir.display()
+        )
+        .await;
+        return Ok(vec![]);
+    };
 
-    let completions = future::try_join_all(fs::read_dir(&dir).await?.into_iter().map(
-        |file| async move {
-            let filename = file.file_name().into_string().map_err(|os_str| {
-                PathServerError::EncodingError(format!(
-                    "Failed to convert file name to string: {}",
-                    os_str.to_string_lossy()
-                ))
-            })?;
-            if !filename.starts_with(partial_name) {
-                return PathServerResult::Ok(None);
-            }
-            if !show_hidden_files && fs::is_hidden_file(&file.path())? {
-                return Ok(None);
-            }
-            if fs::is_dir(&file.path()).await {
-                let completion = CompletionItemInner {
-                    completion: ls_types::CompletionItem {
-                        label: filename.clone(),
-                        kind: Some(ls_types::CompletionItemKind::FOLDER),
-                        insert_text: if trigger_next {
-                            Some(filename.clone() + "/")
-                        } else {
-                            Some(filename.clone())
-                        },
-                        command: if trigger_next {
-                            Some(ls_types::Command {
-                                title: "triggerSuggest".to_string(),
-                                command: "editor.action.triggerSuggest".to_string(),
-                                arguments: None,
-                            })
-                        } else {
-                            None
-                        },
-                        sort_text: Some(format!("{}-{}", root_schema_order, root_schema)),
-                        filter_text: Some(format!("{}-{}", root_schema, filename.clone())),
-                        label_details: Some(ls_types::CompletionItemLabelDetails {
-                            description: Some(format!("from {}", root_schema)),
-                            ..Default::default()
-                        }),
-                        ..Default::default()
+    let completions = future::try_join_all(entries.into_iter().map(|file| async move {
+        let filename = file.file_name().into_string().map_err(|os_str| {
+            PathServerError::EncodingError(format!(
+                "Failed to convert file name to string: {}",
+                os_str.to_string_lossy()
+            ))
+        })?;
+        if !filename.starts_with(partial_name) {
+            return PathServerResult::Ok(None);
+        }
+        if !show_hidden_files && fs::is_hidden_file(&file.path())? {
+            return Ok(None);
+        }
+        if fs::is_dir(&file.path()).await {
+            let completion = CompletionItemInner {
+                completion: ls_types::CompletionItem {
+                    label: filename.clone(),
+                    kind: Some(ls_types::CompletionItemKind::FOLDER),
+                    insert_text: if trigger_next {
+                        Some(filename.clone() + "/")
+                    } else {
+                        Some(filename.clone())
                     },
-                    full_path: file.path(),
-                };
-                Ok(Some(completion))
-            } else {
-                let completion = CompletionItemInner {
-                    completion: ls_types::CompletionItem {
-                        label: filename.clone(),
-                        kind: Some(ls_types::CompletionItemKind::FILE),
-                        insert_text: Some(filename.clone()),
-                        sort_text: Some(format!("{}-{}", root_schema_order, root_schema)),
-                        filter_text: Some(format!("{}-{}", root_schema, filename.clone())),
-                        label_details: Some(ls_types::CompletionItemLabelDetails {
-                            description: Some(format!("from {}", root_schema)),
-                            ..Default::default()
-                        }),
-                        ..Default::default()
+                    command: if trigger_next {
+                        Some(ls_types::Command {
+                            title: "triggerSuggest".to_string(),
+                            command: "editor.action.triggerSuggest".to_string(),
+                            arguments: None,
+                        })
+                    } else {
+                        None
                     },
-                    full_path: file.path(),
-                };
-                Ok(Some(completion))
-            }
-        },
-    ))
+                    sort_text: Some(format!("{}-{}", root_schema_order, root_schema)),
+                    filter_text: Some(format!("{}-{}", root_schema, filename.clone())),
+                    label_details: Some(ls_types::CompletionItemLabelDetails {
+                        description: Some(format!("from {}", root_schema)),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+                full_path: file.path(),
+            };
+            Ok(Some(completion))
+        } else {
+            let completion = CompletionItemInner {
+                completion: ls_types::CompletionItem {
+                    label: filename.clone(),
+                    kind: Some(ls_types::CompletionItemKind::FILE),
+                    insert_text: Some(filename.clone()),
+                    sort_text: Some(format!("{}-{}", root_schema_order, root_schema)),
+                    filter_text: Some(format!("{}-{}", root_schema, filename.clone())),
+                    label_details: Some(ls_types::CompletionItemLabelDetails {
+                        description: Some(format!("from {}", root_schema)),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+                full_path: file.path(),
+            };
+            Ok(Some(completion))
+        }
+    }))
     .await?
     .into_iter()
     .flatten()
