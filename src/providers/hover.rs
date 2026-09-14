@@ -8,7 +8,7 @@ use crate::resolver::resolve_at_pos;
 
 pub async fn provide_hover(
     doc: &Document,
-    parent: &Option<String>,
+    parent: Option<&str>,
     line: usize,
     character: usize,
     config: &Config,
@@ -62,7 +62,7 @@ mod tests {
 
         let res = provide_hover(
             &doc,
-            &Option::Some(current_file.to_string_lossy().into_owned()),
+            Option::Some(current_file.to_str().unwrap()),
             line,
             character + 1,
             &Config::default(),
@@ -108,13 +108,7 @@ mod tests {
 
         let res = provide_hover(
             &doc,
-            &Option::Some(
-                current_file
-                    .parent()
-                    .unwrap()
-                    .to_string_lossy()
-                    .into_owned(),
-            ),
+            Option::Some(current_file.parent().unwrap().to_str().unwrap()),
             line,
             character + 1,
             &Config::default(),

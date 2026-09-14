@@ -61,44 +61,55 @@ impl Config {
     pub fn base_paths(
         &self,
         workspace_folders: &[String],
-        document_parent: Option<&String>,
-        user_home: Option<&String>,
+        document_parent: Option<&str>,
+        user_home: Option<&str>,
     ) -> Vec<(PathBuf, String, usize)> {
         self.base_path
             .iter()
             .enumerate()
-            .filter_map(|(index, path)| {
-                if path.contains("${workspaceFolder}") {
-                    Some(
-                        workspace_folders
-                            .iter()
-                            .map(|workspace_folder| {
-                                let expanded = path.replace("${workspaceFolder}", workspace_folder);
-                                (PathBuf::from(expanded), path.clone(), index)
-                            })
-                            .collect(),
-                    )
-                } else if path.contains("${document}") {
-                    match document_parent {
-                        Some(parent) => {
-                            let expanded = path.replace("${document}", parent);
-                            Some(vec![(PathBuf::from(expanded), path.clone(), index)])
-                        }
-                        None => None,
-                    }
-                } else if path.contains("${userHome}") {
-                    match user_home {
-                        Some(home) => {
-                            let expanded = path.replace("${userHome}", home);
-                            Some(vec![(PathBuf::from(expanded), path.clone(), index)])
-                        }
-                        None => None,
-                    }
+            .flat_map(|(index, path)| {
+                let result = if path.contains("${workspaceFolder}") {
+                    workspace_folders
+                        .iter()
+                        .map(|workspace_folder| {
+                            let expanded = path.replace("${workspaceFolder}", workspace_folder);
+                            (expanded, path.clone(), index)
+                        })
+                        .collect()
                 } else {
-                    Some(vec![(PathBuf::from(path), path.clone(), index)])
-                }
+                    vec![(path.clone(), path.clone(), index)]
+                };
+                result
+                    .into_iter()
+                    .flat_map(|mut res| {
+                        if res.0.contains("${document}") {
+                            match document_parent {
+                                Some(parent) => {
+                                    res.0 = res.0.replace("${document}", parent);
+                                    Some(res)
+                                }
+                                None => None,
+                            }
+                        } else {
+                            Some(res)
+                        }
+                    })
+                    .flat_map(|mut res| {
+                        if res.0.contains("${userHome}") {
+                            match user_home {
+                                Some(home) => {
+                                    res.0 = res.0.replace("${userHome}", home);
+                                    Some(res)
+                                }
+                                None => None,
+                            }
+                        } else {
+                            Some(res)
+                        }
+                    })
+                    .map(|res| (PathBuf::from(res.0), res.1, res.2))
+                    .collect::<Vec<_>>()
             })
-            .flatten()
             .collect()
     }
 
@@ -295,7 +306,7 @@ mod tests {
         };
 
         let workspace_folders = vec!["/ws1".to_string(), "/ws2".to_string()];
-        let document_parent = Some(&"/ws1/project".to_string());
+        let document_parent = Some("/ws1/project");
         let user_home = None;
 
         let result = config.base_paths(&workspace_folders, document_parent, user_home);
@@ -334,7 +345,7 @@ mod tests {
 
         let workspace_folders = vec![];
         let document_parent = None;
-        let user_home = Some(&"/home/user".to_string());
+        let user_home = Some("/home/user");
 
         let result = config.base_paths(&workspace_folders, document_parent, user_home);
 
@@ -402,5 +413,23 @@ mod tests {
         assert!(res.is_ok());
         let cfg = res.unwrap();
         assert_eq!(cfg, default);
+    }
+
+    #[test]
+    fn test_base_path_with_multi_placeholder() {
+        let mut config = Config::default();
+        config.base_path = vec!["${workspaceFolder}/${document}/${userHome}".to_owned()];
+        let workspace_folders = vec!["1".to_owned(), "2".to_owned(), "3".to_owned()];
+        let document = "a";
+        let user_home = "b";
+        let resolved = config.base_paths(&workspace_folders, Some(document), Some(user_home));
+        assert_eq!(resolved.len(), workspace_folders.len());
+        assert_eq!(
+            resolved
+                .iter()
+                .map(|resolved| resolved.0.to_str().unwrap().to_string())
+                .collect::<Vec<String>>(),
+            vec!["1/a/b".to_owned(), "2/a/b".to_owned(), "3/a/b".to_owned()]
+        )
     }
 }

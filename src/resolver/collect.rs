@@ -7,7 +7,9 @@ use crate::config::Config;
 use crate::document::Document;
 use crate::error::*;
 use crate::fs;
-use crate::parser::{PathCandidate, parse_document};
+use crate::lsp_warn;
+use crate::parser;
+use crate::parser::PathCandidate;
 
 use super::{RESOLVE_CACHE_TTL, ResolvedPath, ResolvedPathCache};
 
@@ -15,7 +17,7 @@ pub async fn resolve_all(
     document: &Document,
     config: &Config,
     workspace_roots: &[String],
-    doc_parent: &Option<String>,
+    doc_parent: Option<&str>,
 ) -> PathServerResult<Arc<Vec<ResolvedPath>>> {
     let mut cache = document.resolved_path.lock().await;
     let signature = config.signature()?;
@@ -40,15 +42,19 @@ async fn compute_tokens(
     document: &Document,
     config: &Config,
     workspace_roots: &[String],
-    doc_parent: &Option<String>,
+    doc_parent: Option<&str>,
 ) -> PathServerResult<Vec<ResolvedPath>> {
-    let home = std::env::var("HOME").ok();
+    let home = fs::get_home_dir();
+    if home.is_none() {
+        lsp_warn!("Failed to get home directory, '~' will not be expanded").await;
+    }
     let path_candidates = if let Some(cache) = &*document.candidate_path.lock().await {
         // hit
         cache.clone()
     } else {
         // miss
-        let path_candidates: Arc<Vec<Vec<PathCandidate>>> = Arc::new(parse_document(document)?);
+        let path_candidates: Arc<Vec<Vec<PathCandidate>>> =
+            Arc::new(parser::parse_document(document)?);
         *document.candidate_path.lock().await = Some(path_candidates.clone());
         path_candidates
     };
@@ -58,8 +64,8 @@ async fn compute_tokens(
                 candidates,
                 config,
                 workspace_roots,
-                doc_parent.as_ref(),
-                home.as_ref(),
+                doc_parent,
+                home.as_deref(),
                 document,
             )
             .await
@@ -79,12 +85,17 @@ async fn filter_exist_path(
     candidates: &[PathCandidate],
     config: &Config,
     workspace_roots: &[String],
-    parent: Option<&String>,
-    home: Option<&String>,
+    parent: Option<&str>,
+    home: Option<&str>,
     document: &Document,
 ) -> PathServerResult<Vec<ResolvedPath>> {
     let resolved = future::try_join_all(candidates.iter().map(|candidate| async move {
-        let path = PathBuf::from(&candidate.content);
+        let path = if let Some(home) = home {
+            let expanded = fs::expand_tilde(&candidate.content, home);
+            PathBuf::from(expanded)
+        } else {
+            PathBuf::from(&candidate.content)
+        };
         if path.is_absolute() {
             if fs::exists(&path).await {
                 PathServerResult::Ok(vec![
@@ -101,7 +112,6 @@ async fn filter_exist_path(
                         .into_iter()
                         .map(|(base_path, _, _)| {
                             let path = &path;
-                            let candidate = &candidate;
                             async move {
                                 let full_path = base_path.join(path);
                                 if fs::exists(&full_path).await {
