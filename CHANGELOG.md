@@ -2,7 +2,7 @@
 
 All notable changes to the Path Server will be documented in this file.
 
-## Unrelease
+## [1.4.2] - 2026-09-14
 Path Server is now published to Open VSX! You can now view it at https://open-vsx.org/extension/LKL/path-server
 ### Fixed
 - **Core**: Fixed an error when generating completions in a directory without read permission.
