@@ -1,6 +1,6 @@
 [package]
 name = "path-server"
-version = "1.4.2"
+version = "1.4.3"
 edition = "2024"
 description = "A fast and lightweight language server for path completion."
 repository = "https://github.com/kunlinglio/path-server"
