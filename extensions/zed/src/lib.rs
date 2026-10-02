@@ -95,12 +95,12 @@ impl PathServerExtension {
             return Err("No asset found with name.".to_string());
         };
 
-        // 3. create dir: path-server-vx.x.x
+        // 4. create dir: path-server-vx.x.x
         let Ok(_) = std::fs::create_dir_all(EXECUTABLE_DIR) else {
             return Err("Failed to create executable directory.".to_string());
         };
 
-        // 4. download executable
+        // 5. download executable
         let binary_path = format!("{EXECUTABLE_DIR}/{}", asset.name);
         if !std::fs::metadata(&binary_path).is_ok_and(|stat| stat.is_file()) {
             zed::set_language_server_installation_status(
@@ -118,7 +118,7 @@ impl PathServerExtension {
                 return Err("Failed to make executable.".to_string());
             };
 
-            // 5. clean up old versions
+            // 6. clean up old versions
             let Ok(entries) = std::fs::read_dir(EXECUTABLE_DIR) else {
                 zed::set_language_server_installation_status(
                     language_server_id,
@@ -247,13 +247,16 @@ impl zed::Extension for PathServerExtension {
 
     fn language_server_workspace_configuration(
         &mut self,
-        _server_id: &zed::LanguageServerId,
+        server_id: &zed::LanguageServerId,
         worktree: &zed::Worktree,
     ) -> zed::Result<Option<zed::serde_json::Value>> {
-        let settings = LspSettings::for_worktree("path-server", worktree)
+        let settings = LspSettings::for_worktree(server_id.as_ref(), worktree)
             .ok()
             .and_then(|lsp_settings| lsp_settings.settings)
             .unwrap_or_default();
+
+        // Convert configuration key into `path-server`
+        // See `config::get` in the path-server crate (src/config.rs)
         Ok(Some(serde_json::json!({
             "path-server": settings
         })))
