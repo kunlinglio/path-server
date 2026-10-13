@@ -59,6 +59,7 @@ pub enum Language {
     latex,
     lua,
     luau,
+    make,
     makefile,
     markdown,
     mdx,
