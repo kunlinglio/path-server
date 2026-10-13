@@ -2,6 +2,10 @@
 
 All notable changes to the Path Server will be documented in this file.
 
+## [Unreleased]
+### Fixed
+- **Zed**: Fixed path completion not working in Makefiles. ([#58](https://github.com/kunlinglio/path-server/pull/58))
+
 ## [1.4.3] - 2026-10-02
 ### Fixed
 - **Zed**: Fixed an issue where Zed extension read settings from `lsp.path-server.settings` rather than `lsp.path-server-lsp.settings`. ([#55](https://github.com/kunlinglio/path-server/issues/55))

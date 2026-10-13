@@ -59,6 +59,8 @@ pub enum Language {
     latex,
     lua,
     luau,
+    // The language id for makefile in Zed is `make`, but in VS Code, it's `makefile`.
+    // See https://github.com/kunlinglio/path-server/pull/58
     make,
     makefile,
     markdown,
