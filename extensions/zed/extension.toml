@@ -53,6 +53,7 @@ languages = [
   "LaTeX",
   "Lua",
   "Luau",
+  "Make",
   "Makefile",
   "Markdown",
   "MDX",
