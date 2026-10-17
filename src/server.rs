@@ -111,7 +111,6 @@ impl tower_lsp_server::LanguageServer for PathServer {
                         ".".to_string(),
                         "/".to_string(),
                         "\\".to_string(), // For windows paths
-                        ":".to_string(),
                     ]),
                     resolve_provider: Some(false),
                     ..Default::default()
