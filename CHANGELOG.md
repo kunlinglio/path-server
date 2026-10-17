@@ -2,6 +2,11 @@
 
 All notable changes to the Path Server will be documented in this file.
 
+## [Unreleased]
+### Fixed
+- **Core**: Removed `:` from completion trigger characters to prevent the completion menu from opening when typing `:` in languages like Python (e.g. `for i in range(5):`). Windows drive-letter paths (e.g. `C:\...`) still trigger completion via `\` or `/`. ([#61](https://github.com/kunlinglio/path-server/issues/61))
+
+
 ## [1.4.4] - 2026-10-13
 ### Fixed
 - **Zed**: Fixed path completion not working in Makefiles. ([#58](https://github.com/kunlinglio/path-server/pull/58))
