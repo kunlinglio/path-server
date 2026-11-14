@@ -13,7 +13,7 @@ use crate::document::Document;
 use crate::editor_info::EditorInfo;
 use crate::error::*;
 use crate::fs;
-use crate::logger::{self};
+use crate::logger;
 use crate::parser::tree_sitter_supported;
 use crate::providers;
 use crate::server_info::ServerInfo;
